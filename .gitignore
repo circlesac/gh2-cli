@@ -1,0 +1,6 @@
+node_modules/
+dist/
+bin/native/
+*.tgz
+.DS_Store
+*.bun-build

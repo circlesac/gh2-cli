@@ -1,0 +1,34 @@
+{
+  "name": "@circlesac/gh2",
+  "description": "GitHub App lifecycle CLI — create, register, and manage GitHub Apps from the terminal",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "gh2": "bin/gh2"
+  },
+  "files": [
+    "bin",
+    "skills"
+  ],
+  "scripts": {
+    "build": "bun build --compile --outfile=dist/gh2 src/index.ts",
+    "dev": "bun run src/index.ts",
+    "postinstall": "node bin/install.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "citty": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/circlesac/gh2-cli"
+  },
+  "version": "0.0.1"
+}

@@ -1,0 +1,36 @@
+class Gh2 < Formula
+  desc "GitHub App lifecycle CLI — create, register, and manage GitHub Apps from the terminal"
+  homepage "https://github.com/circlesac/gh2-cli"
+  version "VERSION_PLACEHOLDER"
+  license "MIT"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/circlesac/gh2-cli/releases/download/v#{version}/gh2-darwin-arm64.tar.gz"
+      sha256 "SHA_DARWIN_ARM64"
+    end
+    on_intel do
+      url "https://github.com/circlesac/gh2-cli/releases/download/v#{version}/gh2-darwin-x64.tar.gz"
+      sha256 "SHA_DARWIN_X64"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/circlesac/gh2-cli/releases/download/v#{version}/gh2-linux-arm64.tar.gz"
+      sha256 "SHA_LINUX_ARM64"
+    end
+    on_intel do
+      url "https://github.com/circlesac/gh2-cli/releases/download/v#{version}/gh2-linux-x64.tar.gz"
+      sha256 "SHA_LINUX_X64"
+    end
+  end
+
+  def install
+    bin.install "gh2"
+  end
+
+  test do
+    system "#{bin}/gh2", "--help"
+  end
+end
