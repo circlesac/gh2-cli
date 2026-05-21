@@ -104,10 +104,22 @@ function decryptCookie(encrypted: Buffer, key: Buffer): string {
   decipher.setAutoPadding(false);
   const decrypted = Buffer.concat([decipher.update(payload), decipher.final()]);
   const padByte = decrypted[decrypted.length - 1]!;
-  const unpadded =
+  let unpadded =
     padByte > 0 && padByte <= 16
       ? decrypted.subarray(0, decrypted.length - padByte)
       : decrypted;
+  // Chrome 118+ prepends SHA-256(host_key) (32 bytes) before the plaintext value.
+  // Detect heuristically: if the leading 32 bytes contain non-UTF8/non-printable
+  // bytes but the remainder is valid printable text, strip the prefix.
+  if (unpadded.length >= 32) {
+    const head = unpadded.subarray(0, 32);
+    const tail = unpadded.subarray(32);
+    const headLooksBinary = head.some((b) => b < 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d);
+    const tailLooksPrintable = tail.every((b) => b >= 0x20 && b < 0x7f);
+    if (headLooksBinary && tailLooksPrintable && tail.length > 0) {
+      unpadded = tail;
+    }
+  }
   return unpadded.toString("utf-8");
 }
 
