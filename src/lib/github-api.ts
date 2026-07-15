@@ -87,6 +87,9 @@ export async function configureWebhook(
   webhookSecret: string,
 ): Promise<void> {
   const jwt = createGitHubJwt(appId, privateKeyPem);
+  // NOTE: `/app/hook/config` does NOT accept `active` (422 "not a permitted
+  // key"). A webhook's active state can only be set in the create manifest, so
+  // `app create` must register it `active: true` — see create.ts.
   await githubApi("https://api.github.com/app/hook/config", {
     method: "PATCH",
     headers: {

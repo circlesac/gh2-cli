@@ -20,7 +20,13 @@ function buildGitHubAppManifest(
   return {
     name,
     url: homepage,
-    hook_attributes: { url: "https://example.com/webhook", active: false },
+    // Register the webhook ACTIVE. A webhook's active flag can only be set here
+    // (the manifest) — `/app/hook/config` rejects `active` — so creating it
+    // inactive leaves it permanently undeliverable via the CLI. The placeholder
+    // URL is replaced later by `app update --webhook-url`; the one create-time
+    // verification ping to this placeholder failing is expected and harmless
+    // (GitHub only auto-disables after sustained failures, not a single one).
+    hook_attributes: { url: "https://example.com/webhook", active: true },
     redirect_url: callbackUrl,
     callback_urls: [callbackUrl],
     public: isPublic,
