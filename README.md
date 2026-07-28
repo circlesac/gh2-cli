@@ -1,6 +1,6 @@
 # gh2-cli
 
-GitHub App lifecycle CLI — create, register, and manage GitHub Apps from the terminal.
+GitHub App lifecycle and Support operations from the terminal.
 
 Mirror of [`circlesac/slack2-cli`](https://github.com/circlesac/slack2-cli) for the GitHub side.
 
@@ -28,7 +28,31 @@ gh2 app token --installation <id> [--stage <s>]
 gh2 app export [--stage <s>] [--output <path>|-]
 gh2 app login
 gh2 app list  [--org <org>]
+gh2 support login
+gh2 support create --subject <subject> --body <body> [--account <identifier>] [--yes]
 ```
+
+### GitHub Support tickets
+
+`gh2 support create` signs in to `support.github.com` through GitHub OAuth using the session captured by `gh2 support login`. It does not open a browser. The default is a live-authenticated dry run; add `--yes` only after reviewing the exact ticket.
+
+```bash
+gh2 support login
+
+gh2 support create \
+  --account "Circles Inc." \
+  --subject "Remove sensitive data from repository history" \
+  --body-file ./ticket.md
+
+# Submit the reviewed ticket
+gh2 support create \
+  --account "Circles Inc." \
+  --subject "Remove sensitive data from repository history" \
+  --body-file ./ticket.md \
+  --yes
+```
+
+The command uses GitHub Support's authenticated web endpoint because GitHub does not publish a Support ticket REST or GraphQL API. Portal changes can therefore require a `gh2` update. If GitHub requires a captcha, the command refuses to submit and directs the operator to the portal.
 
 ## Webhook lifecycle
 
@@ -56,7 +80,7 @@ interface GitHubAppConfig {
 
 | Channel | Mechanism | Used by |
 |---|---|---|
-| Web session (cookies) | OS keystore extract → `~/.gh2/auth.json` | `login`, `list` |
+| Web session (cookies) | OS keystore extract → `~/.gh2/auth.json` | App `login`/`list`/`delete`, Support `login`/`create` |
 | API (JWT) | RS256 sign with app PEM | `info`, `update`, `token`, `register` |
 
 ## License

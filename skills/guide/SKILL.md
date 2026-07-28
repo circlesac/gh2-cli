@@ -1,12 +1,12 @@
 ---
 name: gh2
-description: Guide for creating and managing GitHub Apps via the gh2 CLI — manifest-based app creation, JWT-signed API operations, installation token minting
+description: Guide for creating and managing GitHub Apps and creating GitHub Support tickets via the gh2 CLI — manifest-based app creation, JWT-signed API operations, installation token minting, and browserless Support requests
 user-invocable: false
 ---
 
 # gh2 CLI
 
-GitHub App lifecycle management from the terminal. Mirrors slack2-cli but for GitHub Apps. Uses the GitHub App Manifest flow for creation (no Puppeteer — local callback server + auto-submit form), then JWT-signed REST calls for everything else.
+GitHub App lifecycle and Support operations from the terminal. Uses the GitHub App Manifest flow for creation, JWT-signed REST calls for supported App operations, and a cookie-authenticated Support portal session where GitHub exposes no public API.
 
 ## JSON contract
 
@@ -60,6 +60,29 @@ gh2 app list --org circlesac    # org apps
 ```
 
 Session stored at `~/.gh2/auth.json`.
+
+## GitHub Support
+
+Create a ticket without opening the Support portal in a browser:
+
+```bash
+gh2 support login
+
+# Dry run: authenticates and prints the exact ticket without creating it
+gh2 support create \
+  --account "Circles Inc." \
+  --subject "Remove sensitive data from repository history" \
+  --body-file ./ticket.md
+
+# Submit only after reviewing the dry run
+gh2 support create \
+  --account "Circles Inc." \
+  --subject "Remove sensitive data from repository history" \
+  --body-file ./ticket.md \
+  --yes
+```
+
+Use `--body -` to read the body from stdin. The command refuses submission if GitHub requires a captcha. Treat this as a web integration that may need updating when the Support portal changes.
 
 ## Default config path
 

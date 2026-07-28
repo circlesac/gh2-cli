@@ -1,6 +1,6 @@
 {
   "name": "@circlesac/gh2",
-  "description": "GitHub App lifecycle CLI — create, register, and manage GitHub Apps from the terminal",
+  "description": "GitHub App lifecycle and Support operations from the terminal",
   "license": "MIT",
   "type": "module",
   "bin": {
