@@ -24,6 +24,7 @@ gh2 app create <name> [--org <org>] [--stage <s>]
 gh2 app register <app-id> --pem <path> --webhook-secret <s> [--stage <s>]
 gh2 app info  [<app-id>] [--stage <s>] [--output json]
 gh2 app update [--webhook-url <url>] [--stage <s>]
+gh2 app permissions <slug> [--org <org>] [--set <permission>=none|read|write] [--yes]
 gh2 app token --installation <id> [--stage <s>]
 gh2 app export [--stage <s>] [--output <path>|-]
 gh2 app login
@@ -31,6 +32,31 @@ gh2 app list  [--org <org>]
 gh2 support login
 gh2 support create --subject <subject> --body <body> [--account <identifier>] [--yes]
 ```
+
+### GitHub App permissions
+
+Permission changes are a live-authenticated dry run unless `--yes` is present.
+The command preserves every permission and subscribed event not named in
+`--set`, then reads the live form again before reporting success.
+
+```bash
+# Inspect currently selected permissions
+gh2 app permissions my-bot --org my-org
+
+# Preview a change
+gh2 app permissions my-bot --org my-org --set actions=read
+
+# Submit the reviewed change
+gh2 app permissions my-bot --org my-org \
+  --set actions=read \
+  --note "Read workflow activity for the weekly repository policy review." \
+  --yes
+```
+
+GitHub does not expose a public REST endpoint for changing a GitHub App
+registration's permissions, so this command replays the owner settings form with
+the session captured by `gh2 app login`. Existing installations may still require
+their owners to accept newly requested permissions in GitHub.
 
 ### GitHub Support tickets
 
@@ -80,7 +106,7 @@ interface GitHubAppConfig {
 
 | Channel | Mechanism | Used by |
 |---|---|---|
-| Web session (cookies) | OS keystore extract → `~/.gh2/auth.json` | App `login`/`list`/`delete`, Support `login`/`create` |
+| Web session (cookies) | OS keystore extract → `~/.gh2/auth.json` | App `login`/`list`/`permissions`/`delete`, Support `login`/`create` |
 | API (JWT) | RS256 sign with app PEM | `info`, `update`, `token`, `register` |
 
 ## License

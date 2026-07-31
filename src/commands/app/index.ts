@@ -8,6 +8,7 @@ import { exportCommand } from "./export.ts";
 import { loginCommand } from "./login.ts";
 import { listCommand } from "./list.ts";
 import { deleteCommand } from "./delete.ts";
+import { permissionsCommand } from "./permissions.ts";
 
 export const appCommand = defineCommand({
   meta: {
@@ -24,5 +25,6 @@ export const appCommand = defineCommand({
     login: loginCommand,
     list: listCommand,
     delete: deleteCommand,
+    permissions: permissionsCommand,
   },
 });

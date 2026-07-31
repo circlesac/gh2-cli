@@ -57,9 +57,21 @@ For ops that require a logged-in github.com session (e.g. listing apps you own â
 gh2 app login   # reads cookies from Chrome/Arc/Edge/Brave keystore on macOS
 gh2 app list                    # personal apps
 gh2 app list --org circlesac    # org apps
+
+# Inspect or update App permissions (dry-run unless --yes)
+gh2 app permissions my-bot --org circlesac --set actions=read
+gh2 app permissions my-bot --org circlesac \
+  --set actions=read \
+  --note "Read workflow activity for the weekly repository policy review." \
+  --yes
 ```
 
 Session stored at `~/.gh2/auth.json`.
+
+Permission updates replay GitHub's live owner settings form, preserving all
+permissions and webhook-event subscriptions not named in `--set`. Existing
+installations can require a separate owner approval after the App registration is
+updated.
 
 ## GitHub Support
 
