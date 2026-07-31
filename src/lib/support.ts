@@ -195,6 +195,97 @@ export function buildSupportTicketPayload(
   };
 }
 
+export interface SupportTicketPage {
+  ticketId: string;
+  scope: string;
+  commentAction: string;
+  authenticityToken: string;
+  subject?: string;
+}
+
+function attribute(tag: string, name: string): string | undefined {
+  // The leading boundary matters: the comment form carries both `action` and
+  // `data-action`, and an unanchored match returns the Catalyst binding.
+  const value = tag.match(new RegExp(`[\\s<]${name}="([^"]*)"`, "i"))?.[1];
+  return value === undefined ? undefined : decodeHtmlEntities(value);
+}
+
+/**
+ * The ticket page is server-rendered: the comment box is a plain form posting
+ * to `/ticket/<scope>/<id>/comment`. The bundled JS only drives websocket
+ * refresh hints, so parsing the markup is the whole contract.
+ */
+export function parseSupportTicketPage(html: string): SupportTicketPage {
+  const ticketTag = html.match(/<[^>]*id="ticket"[^>]*>/i)?.[0];
+  if (!ticketTag) {
+    if (/Ticket not found/i.test(html)) {
+      throw new Error(
+        "GitHub Support says the ticket does not exist or is not accessible to this session. Re-run `gh2 support login` if your browser is signed in as a different account.",
+      );
+    }
+    throw new Error(
+      "GitHub Support ticket data was not found. The portal markup may have changed.",
+    );
+  }
+
+  const ticketId = attribute(ticketTag, "data-ticket-id");
+  const orgType = attribute(ticketTag, "data-org-type");
+  const orgId = attribute(ticketTag, "data-org-id");
+  if (!ticketId || !orgType || orgId === undefined) {
+    throw new Error("GitHub Support returned an unexpected ticket-data shape.");
+  }
+
+  const formIndex = html.search(/<form[^>]*id="js-ticket-comment-form"[^>]*>/i);
+  if (formIndex < 0) {
+    throw new Error(
+      `Ticket #${ticketId} has no comment form. It is probably closed or archived.`,
+    );
+  }
+  const rest = html.slice(formIndex);
+  const formTag = rest.match(/<form[^>]*>/i)?.[0] ?? "";
+  const commentAction = attribute(formTag, "action");
+  const tokenTag = rest.match(
+    /<input[^>]*name="authenticity_token"[^>]*>/i,
+  )?.[0];
+  const authenticityToken = tokenTag ? attribute(tokenTag, "value") : undefined;
+  if (!commentAction || !authenticityToken) {
+    throw new Error(
+      "GitHub Support did not return a usable ticket comment form.",
+    );
+  }
+
+  const title = html.match(/<title>([^<]*)<\/title>/i)?.[1];
+  const subject = title
+    ? decodeHtmlEntities(title).replace(/\s*-\s*GitHub Support\s*$/i, "").trim()
+    : undefined;
+
+  return {
+    ticketId,
+    scope: `${orgType}/${orgId}`,
+    commentAction,
+    authenticityToken,
+    subject: subject || undefined,
+  };
+}
+
+/** Scope segments (`personal/0`, `organization/258657334`) from the ticket list. */
+export function parseTicketScopes(html: string): string[] {
+  const tag = html.match(
+    /<[^>]+data-react-class="wrapped-account-selector-ticket"[^>]*>/i,
+  )?.[0];
+  const raw = tag ? attribute(tag, "data-react-props") : undefined;
+  if (!raw) return [];
+  const props = JSON.parse(raw) as { accounts?: { link?: unknown }[] };
+  const scopes = (props.accounts ?? [])
+    .map((account) =>
+      typeof account.link === "string"
+        ? account.link.replace(/^\/tickets\//, "")
+        : undefined,
+    )
+    .filter((scope): scope is string => Boolean(scope));
+  return [...new Set(scopes)];
+}
+
 export function maskEmail(email: string): string {
   const separator = email.lastIndexOf("@");
   if (separator <= 1) return email;
@@ -262,7 +353,8 @@ export class SupportSession {
     headers.set("User-Agent", "gh2-cli");
     if (init.method === "POST") {
       headers.set("Origin", SUPPORT_ORIGIN);
-      headers.set("Referer", `${SUPPORT_ORIGIN}/contact-next`);
+      if (!headers.has("Referer"))
+        headers.set("Referer", `${SUPPORT_ORIGIN}/contact-next`);
     }
 
     const response = await this.fetcher(target, {
@@ -316,6 +408,72 @@ export class SupportSession {
       );
     }
     return result.required;
+  }
+
+  async ticketScopes(): Promise<string[]> {
+    const response = await this.request(
+      `${SUPPORT_ORIGIN}/tickets/personal/0`,
+    );
+    if (!response.ok) return [];
+    return parseTicketScopes(await response.text());
+  }
+
+  /**
+   * Load a ticket, trying each scope until one renders it. The portal answers
+   * HTTP 200 with a "Ticket not found" body for the wrong scope, so the status
+   * code alone cannot decide this.
+   */
+  async openTicket(
+    ticketId: string,
+    scopes: string[],
+  ): Promise<SupportTicketPage> {
+    let lastError: Error | undefined;
+    for (const scope of scopes) {
+      const response = await this.request(
+        `${SUPPORT_ORIGIN}/ticket/${scope}/${ticketId}`,
+      );
+      if (!response.ok) continue;
+      try {
+        return parseSupportTicketPage(await response.text());
+      } catch (error) {
+        lastError = error as Error;
+      }
+    }
+    throw (
+      lastError ??
+      new Error(
+        `Ticket #${ticketId} was not found in any accessible support scope.`,
+      )
+    );
+  }
+
+  async commentOnTicket(
+    page: SupportTicketPage,
+    message: string,
+    close = false,
+  ): Promise<void> {
+    const form = new URLSearchParams({
+      authenticity_token: page.authenticityToken,
+      message,
+    });
+    if (close) form.set("close", "1");
+
+    const response = await this.request(page.commentAction, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "text/html",
+        Referer: `${SUPPORT_ORIGIN}/ticket/${page.scope}/${page.ticketId}`,
+      },
+      body: form.toString(),
+    });
+
+    // A successful comment redirects back to the ticket.
+    if (response.status >= 300 && response.status < 400) return;
+    if (response.ok) return;
+    throw new Error(
+      `GitHub Support rejected the comment (HTTP ${response.status}).`,
+    );
   }
 
   async createTicket(payload: Record<string, unknown>): Promise<unknown> {

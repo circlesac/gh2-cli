@@ -3,6 +3,8 @@ import {
   buildSupportTicketPayload,
   maskEmail,
   parseSupportBootstrap,
+  parseSupportTicketPage,
+  parseTicketScopes,
   selectSupportAccount,
   selectSupportEmail,
   selectSupportProduct,
@@ -120,5 +122,60 @@ describe("buildSupportTicketPayload", () => {
 
   it("masks the contact email in previews", () => {
     expect(maskEmail("mona@example.com")).toBe("m***@example.com");
+  });
+});
+
+const TICKET_HTML = `<!DOCTYPE html><html><head><title>Remove sensitive data from circlesac/entropy history #4608817 - GitHub Support</title></head>
+<body>
+<div id="ticket" data-ticket-id="4608817" data-org-type="personal" data-org-id="0" class="timeline-comment-group"></div>
+<form id="js-ticket-refresh" action="/ticket/personal/0/4608817/refresh" method="post"><input type="hidden" name="authenticity_token" value="refresh-token" /></form>
+<form id="js-ticket-comment-form" data-action="change:restorable-form#saveValue" data-target="restorable-form.form" action="/ticket/personal/0/4608817/comment" method="post"><input type="hidden" name="authenticity_token" value="comment-token" />
+<textarea name="message" required="required"></textarea>
+<button name="close" type="submit" value="1">Comment and close</button></form>
+</body></html>`;
+
+describe("support ticket replies", () => {
+  it("parses the ticket scope and comment form", () => {
+    expect(parseSupportTicketPage(TICKET_HTML)).toEqual({
+      ticketId: "4608817",
+      scope: "personal/0",
+      commentAction: "/ticket/personal/0/4608817/comment",
+      authenticityToken: "comment-token",
+      subject: "Remove sensitive data from circlesac/entropy history #4608817",
+    });
+  });
+
+  it("takes the comment form token, not the refresh form token", () => {
+    expect(parseSupportTicketPage(TICKET_HTML).authenticityToken).not.toBe(
+      "refresh-token",
+    );
+  });
+
+  it("ignores data-action when reading the form action", () => {
+    expect(parseSupportTicketPage(TICKET_HTML).commentAction).toBe(
+      "/ticket/personal/0/4608817/comment",
+    );
+  });
+
+  it("explains an inaccessible ticket instead of a markup error", () => {
+    expect(() =>
+      parseSupportTicketPage("<html><body><h1>Ticket not found</h1></body></html>"),
+    ).toThrow(/not accessible|does not exist/i);
+  });
+
+  it("reports a ticket that has no comment form", () => {
+    const closed = TICKET_HTML.replace(/id="js-ticket-comment-form"/, 'id="other"');
+    expect(() => parseSupportTicketPage(closed)).toThrow(/no comment form/i);
+  });
+
+  it("reads selectable ticket scopes from the list page", () => {
+    const props = JSON.stringify({
+      accounts: [
+        { id: "0", name: "monalisa", type: "personal", link: "/tickets/personal/0" },
+        { id: "42", name: "acme", type: "organization", link: "/tickets/organization/42" },
+      ],
+    }).replace(/"/g, "&quot;");
+    const html = `<div data-react-class="wrapped-account-selector-ticket" data-react-props="${props}"></div>`;
+    expect(parseTicketScopes(html)).toEqual(["personal/0", "organization/42"]);
   });
 });
