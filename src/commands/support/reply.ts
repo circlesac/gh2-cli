@@ -64,7 +64,8 @@ export const supportReplyCommand = defineCommand({
     const body = (await readBody(args.body, args["body-file"])).trim();
     if (!body) throw new Error("Reply body cannot be empty.");
 
-    const session = new SupportSession(await loadAuth());
+    const auth = await loadAuth();
+    const session = new SupportSession(auth);
     await session.login();
 
     const scopes = args.scope
@@ -75,6 +76,7 @@ export const supportReplyCommand = defineCommand({
     printOutput(
       {
         mode: args.yes ? "submit" : "dry-run",
+        as: auth.account ? `@${auth.account}` : "(re-run `gh2 support login`)",
         ticket: page.ticketId,
         scope: page.scope,
         subject: page.subject,

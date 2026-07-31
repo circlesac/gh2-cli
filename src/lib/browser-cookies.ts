@@ -12,6 +12,17 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { createDecipheriv, pbkdf2Sync } from "node:crypto";
+import {
+  selectCookieSource,
+  type ExtractedCookie,
+  type GitHubCookieSource,
+} from "./cookie-source.ts";
+
+export {
+  selectCookieSource,
+  type ExtractedCookie,
+  type GitHubCookieSource,
+} from "./cookie-source.ts";
 
 interface BrowserConfig {
   name: string;
@@ -129,12 +140,6 @@ interface CookieRow {
   expires_utc: number;
 }
 
-interface ExtractedCookie {
-  name: string;
-  value: string;
-  expires?: number;
-}
-
 function readGitHubCookiesFromDb(
   cookiesPath: string,
   browser: BrowserConfig,
@@ -172,23 +177,44 @@ function readGitHubCookiesFromDb(
   }
 }
 
-export async function readGitHubCookies(): Promise<{
-  cookies: ExtractedCookie[];
-  source: string;
-} | null> {
-  if (process.platform !== "darwin") return null;
+function profileName(db: string): string {
+  const parts = db.split("/");
+  return parts.slice(-3, -1).join("/").includes("Network")
+    ? (parts.slice(-3, -2)[0] ?? "Default")
+    : (parts.slice(-2, -1)[0] ?? "Default");
+}
+
+/** Every browser profile holding a usable github.com session, in browser order. */
+export async function listGitHubCookieSources(): Promise<GitHubCookieSource[]> {
+  if (process.platform !== "darwin") return [];
+  const sources: GitHubCookieSource[] = [];
   for (const browser of BROWSERS) {
-    const dbs = findCookieDbs(browser.userDataDir);
-    for (const db of dbs) {
+    for (const db of findCookieDbs(browser.userDataDir)) {
       const cookies = readGitHubCookiesFromDb(db, browser);
-      if (cookies && cookies.some((c) => c.name === "user_session" || c.name === "__Host-user_session_same_site")) {
-        const parts = db.split("/");
-        const profile = parts.slice(-3, -1).join("/").includes("Network")
-          ? parts.slice(-3, -2)[0]
-          : parts.slice(-2, -1)[0];
-        return { cookies, source: `${browser.name} (${profile})` };
-      }
+      if (
+        !cookies?.some(
+          (cookie) =>
+            cookie.name === "user_session" ||
+            cookie.name === "__Host-user_session_same_site",
+        )
+      )
+        continue;
+      const profile = profileName(db);
+      sources.push({
+        cookies,
+        browser: browser.name,
+        profile,
+        source: `${browser.name} (${profile})`,
+        account: cookies.find((cookie) => cookie.name === "dotcom_user")?.value,
+      });
     }
   }
-  return null;
+  return sources;
+}
+
+export async function readGitHubCookies(filter?: {
+  account?: string;
+  source?: string;
+}): Promise<GitHubCookieSource> {
+  return selectCookieSource(await listGitHubCookieSources(), filter);
 }
