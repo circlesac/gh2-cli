@@ -17,6 +17,8 @@ export interface AuthFile {
   cookies: StoredCookie[];
   capturedAt: string;
   source?: string;
+  /** GitHub login the cookies belong to, so a stale capture is visible. */
+  account?: string;
 }
 
 export async function saveAuth(auth: AuthFile): Promise<void> {
