@@ -1,6 +1,6 @@
 # gh2-cli
 
-GitHub App lifecycle and Support operations from the terminal.
+GitHub App lifecycle, fine-grained PAT, and Support operations from the terminal.
 
 Mirror of [`circlesac/slack2-cli`](https://github.com/circlesac/slack2-cli) for the GitHub side.
 
@@ -29,6 +29,10 @@ gh2 app token --installation <id> [--stage <s>]
 gh2 app export [--stage <s>] [--output <path>|-]
 gh2 app login
 gh2 app list  [--org <org>]
+gh2 pat login --account melten-admin
+gh2 pat create --account <login> --name <name> --owner <login> \
+  --repos <all|none|repo,...> --permissions <permission=read|write|admin,...> \
+  --expires-in <days|none> [--yes --token-output <new-file|->]
 gh2 support login
 gh2 support create --subject <subject> --body <body> [--account <identifier>] [--yes]
 ```
@@ -57,6 +61,48 @@ GitHub does not expose a public REST endpoint for changing a GitHub App
 registration's permissions, so this command replays the owner settings form with
 the session captured by `gh2 app login`. Existing installations may still require
 their owners to accept newly requested permissions in GitHub.
+
+### Fine-grained personal access tokens
+
+`gh2 pat create` uses GitHub's authenticated fine-grained PAT form because GitHub
+does not expose a public API that returns a newly created PAT. It verifies the
+captured account, resource owner, repository IDs, permission names and levels,
+and expiration policy against the live form before offering submission. The
+command adds the mandatory `metadata=read` permission automatically.
+
+```bash
+gh2 pat login --account melten-admin
+
+# Live-authenticated dry run. No token is created.
+gh2 pat create \
+  --account melten-admin \
+  --name "Melten Priority Reconciler" \
+  --description "Reconcile repository priorities from melten-policies." \
+  --reason "Automate the approved organization-wide priority policy." \
+  --owner melten-ai \
+  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --permissions issues=write \
+  --expires-in 30
+
+# Create after reviewing the dry run and send only the token to gh.
+gh2 pat create \
+  --account melten-admin \
+  --name "Melten Priority Reconciler" \
+  --description "Reconcile repository priorities from melten-policies." \
+  --reason "Automate the approved organization-wide priority policy." \
+  --owner melten-ai \
+  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --permissions issues=write \
+  --expires-in 30 \
+  --yes \
+  --token-output - | gh secret set GH_TOKEN --repo melten-ai/docs
+```
+
+Submission requires both `--yes` and `--token-output`. `--token-output -` reserves
+stdout for the token so it can be piped without mixing in status output. A file
+destination must not already exist and is created with mode `0600`. The token is
+never included in table or JSON metadata output. GitHub can still place an
+organization-owned token into pending approval after creation.
 
 ### GitHub Support tickets
 
