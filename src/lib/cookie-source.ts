@@ -19,6 +19,18 @@ export interface GitHubCookieSource {
   account?: string;
 }
 
+export function hasUsableSessionCookie(
+  cookies: ExtractedCookie[],
+  now = Math.floor(Date.now() / 1000),
+): boolean {
+  return cookies.some(
+    (cookie) =>
+      (cookie.name === "user_session" ||
+        cookie.name === "__Host-user_session_same_site") &&
+      (cookie.expires === undefined || cookie.expires > now),
+  );
+}
+
 function describe(sources: GitHubCookieSource[]): string {
   return sources
     .map(

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { createDecipheriv, pbkdf2Sync } from "node:crypto";
 import {
+  hasUsableSessionCookie,
   selectCookieSource,
   type ExtractedCookie,
   type GitHubCookieSource,
@@ -179,9 +180,10 @@ function readGitHubCookiesFromDb(
 
 function profileName(db: string): string {
   const parts = db.split("/");
-  return parts.slice(-3, -1).join("/").includes("Network")
-    ? (parts.slice(-3, -2)[0] ?? "Default")
-    : (parts.slice(-2, -1)[0] ?? "Default");
+  const parent = parts.at(-2);
+  return parent === "Network"
+    ? (parts.at(-3) ?? "Default")
+    : (parent ?? "Default");
 }
 
 /** Every browser profile holding a usable github.com session, in browser order. */
@@ -191,14 +193,7 @@ export async function listGitHubCookieSources(): Promise<GitHubCookieSource[]> {
   for (const browser of BROWSERS) {
     for (const db of findCookieDbs(browser.userDataDir)) {
       const cookies = readGitHubCookiesFromDb(db, browser);
-      if (
-        !cookies?.some(
-          (cookie) =>
-            cookie.name === "user_session" ||
-            cookie.name === "__Host-user_session_same_site",
-        )
-      )
-        continue;
+      if (!cookies || !hasUsableSessionCookie(cookies)) continue;
       const profile = profileName(db);
       sources.push({
         cookies,

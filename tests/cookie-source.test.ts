@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  hasUsableSessionCookie,
   selectCookieSource,
   type GitHubCookieSource,
 } from "../src/lib/cookie-source.ts";
@@ -21,6 +22,37 @@ function source(
 const CHROME_DEFAULT = source("ygpark80", "Chrome", "Default");
 const CHROME_WORK = source("melten-admin", "Chrome", "Profile 1");
 const ARC_DEFAULT = source("ygpark80", "Arc", "Default");
+
+describe("browser session eligibility", () => {
+  it("accepts session cookies without an explicit expiration", () => {
+    expect(hasUsableSessionCookie(CHROME_DEFAULT.cookies, 100)).toBe(true);
+  });
+
+  it("rejects an expired session cookie", () => {
+    expect(
+      hasUsableSessionCookie(
+        [{ name: "user_session", value: "expired", expires: 99 }],
+        100,
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts another unexpired GitHub session cookie", () => {
+    expect(
+      hasUsableSessionCookie(
+        [
+          { name: "user_session", value: "expired", expires: 99 },
+          {
+            name: "__Host-user_session_same_site",
+            value: "valid",
+            expires: 101,
+          },
+        ],
+        100,
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("browser session selection", () => {
   it("uses the only signed-in profile without asking", () => {
