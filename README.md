@@ -29,7 +29,7 @@ gh2 app token --installation <id> [--stage <s>]
 gh2 app export [--stage <s>] [--output <path>|-]
 gh2 app login
 gh2 app list  [--org <org>]
-gh2 pat login
+gh2 pat login --account melten-admin
 gh2 pat create --account <login> --name <name> --owner <login> \
   --repos <all|none|repo,...> --permissions <permission=read|write|admin,...> \
   --expires-in <days|none> [--yes --token-output <new-file|->]
@@ -71,7 +71,7 @@ and expiration policy against the live form before offering submission. The
 command adds the mandatory `metadata=read` permission automatically.
 
 ```bash
-gh2 pat login
+gh2 pat login --account melten-admin
 
 # Live-authenticated dry run. No token is created.
 gh2 pat create \

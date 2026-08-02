@@ -80,7 +80,7 @@ captured account, owner, repositories, permissions, and expiration against
 GitHub's current form. It adds `metadata=read` automatically.
 
 ```bash
-gh2 pat login
+gh2 pat login --account melten-admin
 
 gh2 pat create \
   --account melten-admin \
