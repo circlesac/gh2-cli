@@ -1,12 +1,12 @@
 ---
 name: gh2
-description: Guide for creating and managing GitHub Apps and creating GitHub Support tickets via the gh2 CLI — manifest-based app creation, JWT-signed API operations, installation token minting, and browserless Support requests
+description: Guide for creating and managing GitHub Apps, fine-grained personal access tokens, and GitHub Support tickets via the gh2 CLI — manifest-based app creation, JWT-signed API operations, authenticated web-form PAT creation, installation token minting, and browserless Support requests
 user-invocable: false
 ---
 
 # gh2 CLI
 
-GitHub App lifecycle and Support operations from the terminal. Uses the GitHub App Manifest flow for creation, JWT-signed REST calls for supported App operations, and a cookie-authenticated Support portal session where GitHub exposes no public API.
+GitHub App lifecycle, fine-grained PAT, and Support operations from the terminal. Uses the GitHub App Manifest flow for creation, JWT-signed REST calls for supported App operations, and cookie-authenticated web sessions where GitHub exposes no public API.
 
 ## JSON contract
 
@@ -72,6 +72,38 @@ Permission updates replay GitHub's live owner settings form, preserving all
 permissions and webhook-event subscriptions not named in `--set`. Existing
 installations can require a separate owner approval after the App registration is
 updated.
+
+## Fine-grained PATs
+
+Create fine-grained PATs only after a live dry run. The command verifies the
+captured account, owner, repositories, permissions, and expiration against
+GitHub's current form. It adds `metadata=read` automatically.
+
+```bash
+gh2 pat login
+
+gh2 pat create \
+  --account melten-admin \
+  --name "Melten Priority Reconciler" \
+  --owner melten-ai \
+  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --permissions issues=write \
+  --expires-in 30
+
+gh2 pat create \
+  --account melten-admin \
+  --name "Melten Priority Reconciler" \
+  --owner melten-ai \
+  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --permissions issues=write \
+  --expires-in 30 \
+  --yes \
+  --token-output - | gh secret set GH_TOKEN --repo melten-ai/docs
+```
+
+`--yes` also requires `--token-output`. Use `-` only when stdout is piped directly
+to a secret consumer. File output refuses overwrite and uses mode `0600`. Never
+copy the token into logs, table output, issue bodies, or pull request text.
 
 ## GitHub Support
 
