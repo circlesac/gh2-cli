@@ -58,6 +58,32 @@ describe("parsePermissionForm", () => {
     expect(body.get("authenticity_token")).toBe("a&b+c");
   });
 
+  it("reads action-menu permissions and materializes their hidden values", () => {
+    const form = parsePermissionForm(
+      `
+        <form action="/organizations/acme/settings/apps/my-bot/permissions" method="post">
+          <input type="hidden" name="authenticity_token" value="token">
+          <input type="hidden" name="integration[default_permissions][actions]">
+          <button type="button" role="menuitemradio" aria-checked="true" data-resource="actions" data-permission="none"></button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-resource="actions" data-permission="read"></button>
+          <input type="hidden" name="integration[default_permissions][contents]">
+          <button type="button" role="menuitemradio" aria-checked="false" data-resource="contents" data-permission="none"></button>
+          <button type="button" role="menuitemradio" aria-checked="true" data-resource="contents" data-permission="read"></button>
+          <template><input type="hidden" name="integration[single_file_paths][]"></template>
+          <input type="submit" name="commit" value="Save changes" disabled>
+        </form>
+      `,
+      "/organizations/acme/settings/apps/my-bot",
+    )!;
+
+    expect(form.permissions).toEqual({ actions: "none", contents: "read" });
+    const body = buildPermissionBody(form, { actions: "read" });
+    expect(body.get("integration[default_permissions][actions]")).toBe("read");
+    expect(body.get("integration[default_permissions][contents]")).toBe("read");
+    expect(body.has("integration[single_file_paths][]")).toBe(false);
+    expect(body.get("commit")).toBe("Save changes");
+  });
+
   it("ignores forms belonging to another app", () => {
     expect(
       parsePermissionForm(html, "/organizations/acme/settings/apps/other-bot"),

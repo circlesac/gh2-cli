@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -25,7 +25,8 @@ export async function writeGitHubAppConfig(
     process.stdout.write(json);
     return;
   }
-  await writeFile(outputPath, json);
+  await writeFile(outputPath, json, { mode: 0o600 });
+  await chmod(outputPath, 0o600);
 }
 
 export async function readGitHubAppConfig(path: string): Promise<GitHubAppConfig> {

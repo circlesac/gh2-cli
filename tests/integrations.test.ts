@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -26,12 +26,17 @@ describe("integrations", () => {
       );
       const text = readFileSync(path, "utf-8");
       expect(text.endsWith("\n")).toBe(true);
+      expect(statSync(path).mode & 0o777).toBe(0o600);
       const parsed = JSON.parse(text);
       expect(parsed.appId).toBe(42);
 
       const config = await readGitHubAppConfig(path);
       expect(config.name).toBe("test-app");
       expect(decodePrivateKey(config)).toBe(pem);
+
+      chmodSync(path, 0o644);
+      await writeGitHubAppConfig(config, path);
+      expect(statSync(path).mode & 0o777).toBe(0o600);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

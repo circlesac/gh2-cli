@@ -1,6 +1,6 @@
 # gh2-cli
 
-GitHub App lifecycle, fine-grained PAT, and Support operations from the terminal.
+GitHub App lifecycle, fine-grained PAT, Support, and web-only administration operations from the terminal.
 
 Mirror of [`circlesac/slack2-cli`](https://github.com/circlesac/slack2-cli) for the GitHub side.
 
@@ -29,13 +29,35 @@ gh2 app token --installation <id> [--stage <s>]
 gh2 app export [--stage <s>] [--output <path>|-]
 gh2 app login
 gh2 app list  [--org <org>]
-gh2 pat login --account melten-admin
+gh2 app key list <app> [--org <org>]
+gh2 app key generate <app> [--org <org>] --key-output <new-file> [--yes]
+gh2 app key delete <app> <key-id> [--org <org>] [--yes]
+gh2 app key rotate <app> --delete-key <key-id> --key-output <new-file> [--org <org>] [--yes]
+gh2 install approval show <installation-id> [--org <org>]
+gh2 install approval accept <installation-id> [--org <org>] [--yes]
+gh2 repo deleted list [--org <org>]
+gh2 repo restore <owner/repository> [--yes]
+gh2 org pat-policy show <org>
+gh2 org pat-policy update <org> [--access restricted|unrestricted] \
+  [--requests auto|manual] [--max-lifetime none|<days>] [--yes]
+gh2 pat login --account <login>
 gh2 pat create --account <login> --name <name> --owner <login> \
   --repos <all|none|repo,...> --permissions <permission=read|write|admin,...> \
   --expires-in <days|none> [--yes --token-output <new-file|->]
 gh2 support login
 gh2 support create --subject <subject> --body <body> [--account <identifier>] [--yes]
 ```
+
+### Administration boundary
+
+`gh2` adds commands only for operations that have no complete first-class `gh`,
+REST, or GraphQL mutation. When the public API fully covers an operation, use
+`gh api` instead. Browser-cookie commands default to a live dry run, preserve
+unmodified form controls, require `--yes` for submission, and re-read GitHub's
+settings page before reporting success.
+
+The full personal, organization, repository, and enterprise settings census is
+in [`docs/github-admin-gap-census.md`](docs/github-admin-gap-census.md).
 
 ### GitHub App permissions
 
@@ -62,6 +84,73 @@ registration's permissions, so this command replays the owner settings form with
 the session captured by `gh2 app login`. Existing installations may still require
 their owners to accept newly requested permissions in GitHub.
 
+### GitHub App private keys
+
+Private keys are managed through the App owner's authenticated settings page.
+Generated PEM bytes are never printed and must go to a new `--key-output` file,
+created with mode `0600`.
+
+```bash
+gh2 app key list my-bot --org example-org
+gh2 app key generate my-bot --org example-org --key-output ./my-bot.pem
+gh2 app key generate my-bot --org example-org --key-output ./my-bot.pem --yes
+gh2 app key rotate my-bot --org example-org \
+  --delete-key 12345 \
+  --key-output ./my-bot-next.pem \
+  --yes
+```
+
+Rotation generates and saves the replacement, verifies its public-key
+fingerprint on GitHub, and only then deletes the exact ID passed to
+`--delete-key`. The command never chooses an old key by position, age, or label.
+
+### Installation permission approval
+
+When an App registration requests new permissions, the installation owner can
+inspect and accept the pending change without copying GitHub's opaque fingerprint
+or version fields.
+
+```bash
+gh2 install approval show 12345 --org example-org
+gh2 install approval accept 12345 --org example-org
+gh2 install approval accept 12345 --org example-org --yes
+```
+
+Success requires the approval form to disappear and the installation detail
+page to stop presenting the permission-update action.
+
+### Deleted repository restoration
+
+```bash
+gh2 repo deleted list --org example-org
+gh2 repo restore example-org/temporary-repository
+gh2 repo restore example-org/temporary-repository --yes
+```
+
+The CLI resolves `owner/repository` against the live deleted-repository list,
+submits only the matching restore form, and verifies that the restore entry is
+gone. Repository deletion is not part of this command family.
+
+### Organization fine-grained PAT policy
+
+```bash
+gh2 org pat-policy show example-org
+gh2 org pat-policy update example-org \
+  --access restricted \
+  --requests manual \
+  --max-lifetime 90
+gh2 org pat-policy update example-org \
+  --access restricted \
+  --requests manual \
+  --max-lifetime 90 \
+  --yes
+```
+
+Access, request handling, and maximum lifetime are separate GitHub forms. `gh2`
+submits and verifies them one at a time and reports any earlier verified changes
+if a later form fails. Disabled controls are treated as inherited policy and are
+not overridden.
+
 ### Fine-grained personal access tokens
 
 `gh2 pat create` uses GitHub's authenticated fine-grained PAT form because GitHub
@@ -71,31 +160,31 @@ and expiration policy against the live form before offering submission. The
 command adds the mandatory `metadata=read` permission automatically.
 
 ```bash
-gh2 pat login --account melten-admin
+gh2 pat login --account example-user
 
 # Live-authenticated dry run. No token is created.
 gh2 pat create \
-  --account melten-admin \
-  --name "Melten Priority Reconciler" \
-  --description "Reconcile repository priorities from melten-policies." \
-  --reason "Automate the approved organization-wide priority policy." \
-  --owner melten-ai \
-  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --account example-user \
+  --name "Issue Sync" \
+  --description "Synchronize approved issue metadata." \
+  --reason "Run the repository's approved issue synchronization." \
+  --owner example-org \
+  --repos project-one,project-two \
   --permissions issues=write \
   --expires-in 30
 
 # Create after reviewing the dry run and send only the token to gh.
 gh2 pat create \
-  --account melten-admin \
-  --name "Melten Priority Reconciler" \
-  --description "Reconcile repository priorities from melten-policies." \
-  --reason "Automate the approved organization-wide priority policy." \
-  --owner melten-ai \
-  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --account example-user \
+  --name "Issue Sync" \
+  --description "Synchronize approved issue metadata." \
+  --reason "Run the repository's approved issue synchronization." \
+  --owner example-org \
+  --repos project-one,project-two \
   --permissions issues=write \
   --expires-in 30 \
   --yes \
-  --token-output - | gh secret set GH_TOKEN --repo melten-ai/docs
+  --token-output - | gh secret set GH_TOKEN --repo example-org/project-one
 ```
 
 Submission requires both `--yes` and `--token-output`. `--token-output -` reserves
@@ -152,7 +241,7 @@ interface GitHubAppConfig {
 
 | Channel | Mechanism | Used by |
 |---|---|---|
-| Web session (cookies) | OS keystore extract → `~/.gh2/auth.json` | App `login`/`list`/`permissions`/`delete`, Support `login`/`create` |
+| Web session (cookies) | OS keystore extract → `~/.gh2/auth.json` | App `login`/`list`/`permissions`/`delete`/`key`, installation approval, repository restoration, organization PAT policy, PAT creation, Support |
 | API (JWT) | RS256 sign with app PEM | `info`, `update`, `token`, `register` |
 
 ## License

@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { loadAuth, serializeCookies } from "../../lib/auth.ts";
+import { GitHubCookieJar, loadAuth } from "../../lib/auth.ts";
 import { getOutputFormat, printOutput } from "../../lib/output.ts";
 
 type PermissionLevel = "none" | "read" | "write";
@@ -8,6 +8,7 @@ interface PermissionForm {
   action: string;
   fields: [string, string][];
   permissions: Record<string, PermissionLevel>;
+  submit?: [string, string];
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -37,6 +38,10 @@ function parseAttributes(tag: string): Record<string, string> {
   return attributes;
 }
 
+function removeTemplateContents(html: string): string {
+  return html.replace(/<template\b[^>]*>[\s\S]*?<\/template>/gi, "");
+}
+
 export function parsePermissionForm(html: string, settingsPath: string): PermissionForm | null {
   const targetPath = `${settingsPath}/permissions`;
   for (const match of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
@@ -46,18 +51,21 @@ export function parsePermissionForm(html: string, settingsPath: string): Permiss
 
     const fields: [string, string][] = [];
     const permissions: Record<string, PermissionLevel> = {};
-    const body = match[2] ?? "";
+    let submit: [string, string] | undefined;
+    const body = removeTemplateContents(match[2] ?? "");
 
     for (const inputMatch of body.matchAll(/<input\b([^>]*)>/gi)) {
       const attributes = parseAttributes(inputMatch[1] ?? "");
       const name = attributes.name;
-      if (!name || "disabled" in attributes) continue;
+      if (!name) continue;
 
       const type = (attributes.type ?? "text").toLowerCase();
+      const value = attributes.value ?? (type === "checkbox" || type === "radio" ? "on" : "");
+      if (type === "submit") submit = [name, value];
+      if ("disabled" in attributes) continue;
       if (["button", "file", "image", "reset"].includes(type)) continue;
       if ((type === "checkbox" || type === "radio") && !("checked" in attributes)) continue;
 
-      const value = attributes.value ?? (type === "checkbox" || type === "radio" ? "on" : "");
       fields.push([name, value]);
 
       const permissionMatch = name.match(
@@ -79,8 +87,26 @@ export function parsePermissionForm(html: string, settingsPath: string): Permiss
       fields.push([attributes.name, decodeHtmlEntities(textareaMatch[2] ?? "")]);
     }
 
+    for (const buttonMatch of body.matchAll(/<button\b([^>]*)>/gi)) {
+      const attributes = parseAttributes(buttonMatch[1] ?? "");
+      const permission = attributes["data-permission"];
+      const resource = attributes["data-resource"];
+      if (
+        attributes.role !== "menuitemradio" ||
+        attributes["aria-checked"] !== "true" ||
+        !resource ||
+        (permission !== "none" && permission !== "read" && permission !== "write")
+      ) {
+        continue;
+      }
+      if (permissions[resource] && permissions[resource] !== permission) {
+        throw new Error(`Multiple selected permission levels found for ${resource}.`);
+      }
+      permissions[resource] = permission;
+    }
+
     if (!fields.some(([name]) => name === "authenticity_token")) return null;
-    return { action: decodeHtmlEntities(action), fields, permissions };
+    return { action: decodeHtmlEntities(action), fields, permissions, submit };
   }
   return null;
 }
@@ -120,10 +146,14 @@ export function buildPermissionBody(
   note?: string,
 ): URLSearchParams {
   const body = new URLSearchParams(form.fields);
+  for (const [permission, level] of Object.entries(form.permissions)) {
+    body.set(`integration[default_permissions][${permission}]`, level);
+  }
   for (const [permission, level] of Object.entries(requested)) {
     body.set(`integration[default_permissions][${permission}]`, level);
   }
   if (note !== undefined) body.set("integration[note]", note);
+  if (form.submit && !body.has(form.submit[0])) body.set(...form.submit);
   return body;
 }
 
@@ -143,12 +173,17 @@ function changedPermissions(
 async function fetchPermissionForm(
   pageUrl: string,
   settingsPath: string,
-  headers: Record<string, string>,
+  cookies: GitHubCookieJar,
 ): Promise<PermissionForm> {
   const response = await fetch(pageUrl, {
-    headers: { ...headers, Accept: "text/html" },
+    headers: {
+      Cookie: cookies.header(),
+      "User-Agent": "gh2-cli",
+      Accept: "text/html",
+    },
     redirect: "manual",
   });
+  cookies.capture(response.headers);
   if (response.status === 301 || response.status === 302 || response.status === 303) {
     throw new Error(
       "Got a redirect from GitHub — session cookie is likely stale. Run `gh2 app login` again.",
@@ -217,12 +252,9 @@ export const permissionsCommand = defineCommand({
       : `/settings/apps/${slug}`;
     const pageUrl = `https://github.com${settingsPath}/permissions`;
     const auth = await loadAuth();
-    const headers = {
-      Cookie: serializeCookies(auth.cookies),
-      "User-Agent": "gh2-cli",
-    };
+    const cookies = new GitHubCookieJar(auth.cookies);
     const requested = parsePermissionAssignments(args.set);
-    const form = await fetchPermissionForm(pageUrl, settingsPath, headers);
+    const form = await fetchPermissionForm(pageUrl, settingsPath, cookies);
 
     for (const permission of Object.keys(requested)) {
       if (!(permission in form.permissions)) {
@@ -250,7 +282,9 @@ export const permissionsCommand = defineCommand({
     }
     if (!args.yes) {
       printOutput(result, getOutputFormat(args.output));
-      console.log("Dry run only. Re-run with --yes to submit these changes.");
+      if (getOutputFormat(args.output) !== "json") {
+        console.log("Dry run only. Re-run with --yes to submit these changes.");
+      }
       return;
     }
 
@@ -266,7 +300,8 @@ export const permissionsCommand = defineCommand({
     const response = await fetch(actionUrl, {
       method: "POST",
       headers: {
-        ...headers,
+        Cookie: cookies.header(),
+        "User-Agent": "gh2-cli",
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: "https://github.com",
         Referer: pageUrl,
@@ -274,6 +309,7 @@ export const permissionsCommand = defineCommand({
       body: body.toString(),
       redirect: "manual",
     });
+    cookies.capture(response.headers);
     if (response.status !== 302 && response.status !== 303) {
       throw new Error(
         `Permission update did not go through (HTTP ${response.status}, expected a redirect). No success was assumed.`,
@@ -286,7 +322,7 @@ export const permissionsCommand = defineCommand({
       );
     }
 
-    const verified = await fetchPermissionForm(pageUrl, settingsPath, headers);
+    const verified = await fetchPermissionForm(pageUrl, settingsPath, cookies);
     for (const [permission, level] of Object.entries(requested)) {
       if (verified.permissions[permission] !== level) {
         throw new Error(

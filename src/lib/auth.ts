@@ -43,3 +43,27 @@ export async function loadAuth(): Promise<AuthFile> {
 export function serializeCookies(cookies: StoredCookie[]): string {
   return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
 }
+
+export class GitHubCookieJar {
+  private readonly cookies: Map<string, string>;
+
+  constructor(cookies: StoredCookie[]) {
+    this.cookies = new Map(cookies.map((cookie) => [cookie.name, cookie.value]));
+  }
+
+  header(): string {
+    return [...this.cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+  }
+
+  capture(headers: Headers): void {
+    for (const value of headers.getSetCookie()) {
+      const pair = value.split(";", 1)[0] ?? "";
+      const separator = pair.indexOf("=");
+      if (separator <= 0) continue;
+      const name = pair.slice(0, separator);
+      const cookieValue = pair.slice(separator + 1);
+      if (cookieValue) this.cookies.set(name, cookieValue);
+      else this.cookies.delete(name);
+    }
+  }
+}

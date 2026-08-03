@@ -1,12 +1,20 @@
 ---
 name: gh2
-description: Guide for creating and managing GitHub Apps, fine-grained personal access tokens, and GitHub Support tickets via the gh2 CLI â€” manifest-based app creation, JWT-signed API operations, authenticated web-form PAT creation, installation token minting, and browserless Support requests
+description: Guide for GitHub Apps, installation approvals, deleted-repository restoration, organization PAT policies, fine-grained personal access tokens, and Support via the gh2 CLI
 user-invocable: false
 ---
 
 # gh2 CLI
 
-GitHub App lifecycle, fine-grained PAT, and Support operations from the terminal. Uses the GitHub App Manifest flow for creation, JWT-signed REST calls for supported App operations, and cookie-authenticated web sessions where GitHub exposes no public API.
+GitHub App lifecycle, fine-grained PAT, Support, and administration-gap operations from the terminal. Uses the GitHub App Manifest flow for creation, JWT-signed REST calls for supported App operations, and cookie-authenticated web sessions only where GitHub exposes no complete public API.
+
+## Command boundary
+
+Use `gh api` when REST or GraphQL fully covers the operation. Add or use a
+`gh2` browser-cookie command only for a missing mutation or a lifecycle that
+cannot be completed through the public API. Modifying web commands default to a
+dry run, require `--yes`, preserve unmodified controls, and verify by re-reading
+the affected page.
 
 ## JSON contract
 
@@ -56,11 +64,11 @@ For ops that require a logged-in github.com session (e.g. listing apps you own â
 ```bash
 gh2 app login   # reads cookies from Chrome/Arc/Edge/Brave keystore on macOS
 gh2 app list                    # personal apps
-gh2 app list --org circlesac    # org apps
+gh2 app list --org example-org    # org apps
 
 # Inspect or update App permissions (dry-run unless --yes)
-gh2 app permissions my-bot --org circlesac --set actions=read
-gh2 app permissions my-bot --org circlesac \
+gh2 app permissions my-bot --org example-org --set actions=read
+gh2 app permissions my-bot --org example-org \
   --set actions=read \
   --note "Read workflow activity for the weekly repository policy review." \
   --yes
@@ -73,6 +81,61 @@ permissions and webhook-event subscriptions not named in `--set`. Existing
 installations can require a separate owner approval after the App registration is
 updated.
 
+### App private keys
+
+```bash
+gh2 app key list my-bot --org example-org
+gh2 app key generate my-bot --org example-org --key-output ./my-bot.pem
+gh2 app key generate my-bot --org example-org --key-output ./my-bot.pem --yes
+gh2 app key rotate my-bot --org example-org \
+  --delete-key 12345 \
+  --key-output ./my-bot-next.pem \
+  --yes
+```
+
+Generated private keys must go to a new file and are written with mode `0600`.
+Rotation verifies the new key before deleting the exact old key ID.
+
+### Installation permission approval
+
+```bash
+gh2 install approval show 12345 --org example-org
+gh2 install approval accept 12345 --org example-org
+gh2 install approval accept 12345 --org example-org --yes
+```
+
+Opaque approval fields come from the live form and must never be supplied or
+printed by the operator.
+
+### Deleted repository restoration
+
+```bash
+gh2 repo deleted list --org example-org
+gh2 repo restore example-org/temporary-repository
+gh2 repo restore example-org/temporary-repository --yes
+```
+
+The restore command selects one exact live restore entry and verifies that it
+disappears after submission.
+
+### Organization fine-grained PAT policy
+
+```bash
+gh2 org pat-policy show example-org
+gh2 org pat-policy update example-org \
+  --access restricted \
+  --requests manual \
+  --max-lifetime 90
+gh2 org pat-policy update example-org \
+  --access restricted \
+  --requests manual \
+  --max-lifetime 90 \
+  --yes
+```
+
+Disabled controls are inherited policy and must not be overridden. The three
+policy forms are submitted and verified separately.
+
 ## Fine-grained PATs
 
 Create fine-grained PATs only after a live dry run. The command verifies the
@@ -80,25 +143,25 @@ captured account, owner, repositories, permissions, and expiration against
 GitHub's current form. It adds `metadata=read` automatically.
 
 ```bash
-gh2 pat login --account melten-admin
+gh2 pat login --account example-user
 
 gh2 pat create \
-  --account melten-admin \
-  --name "Melten Priority Reconciler" \
-  --owner melten-ai \
-  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --account example-user \
+  --name "Issue Sync" \
+  --owner example-org \
+  --repos project-one,project-two \
   --permissions issues=write \
   --expires-in 30
 
 gh2 pat create \
-  --account melten-admin \
-  --name "Melten Priority Reconciler" \
-  --owner melten-ai \
-  --repos pcie_gen4_pipe_axis_tl,silicon-workbench \
+  --account example-user \
+  --name "Issue Sync" \
+  --owner example-org \
+  --repos project-one,project-two \
   --permissions issues=write \
   --expires-in 30 \
   --yes \
-  --token-output - | gh secret set GH_TOKEN --repo melten-ai/docs
+  --token-output - | gh secret set GH_TOKEN --repo example-org/project-one
 ```
 
 `--yes` also requires `--token-output`. Use `-` only when stdout is piped directly
