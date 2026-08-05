@@ -40,6 +40,7 @@ gh2 repo restore <owner/repository> [--yes]
 gh2 org pat-policy show <org>
 gh2 org pat-policy update <org> [--access restricted|unrestricted] \
   [--requests auto|manual] [--max-lifetime none|<days>] [--yes]
+gh2 doctor --org <org> [--app <slug>] [--installation <id>] [--support]
 gh2 pat login --account <login>
 gh2 pat create --account <login> --name <name> --owner <login> \
   --repos <all|none|repo,...> --permissions <permission=read|write|admin,...> \
@@ -58,6 +59,16 @@ settings page before reporting success.
 
 The full personal, organization, repository, and enterprise settings census is
 in [`docs/github-admin-gap-census.md`](docs/github-admin-gap-census.md).
+
+### Continuous live verification
+
+`gh2 doctor` runs selected browser-cookie integrations in read-only or dry-run mode and classifies authentication gates separately from parser drift. Use it from a trusted local scheduler because GitHub's sensitive settings pages periodically require sudo authentication and browser cookies must not be stored in GitHub Actions secrets.
+
+```bash
+gh2 doctor --org example-org --app example-app --support --output json
+```
+
+See [`docs/live-canary.md`](docs/live-canary.md) for the full probe set, exit-code contract, and macOS scheduling guidance.
 
 ### GitHub App permissions
 

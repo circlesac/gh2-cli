@@ -73,27 +73,29 @@ export const supportReplyCommand = defineCommand({
       : ["personal/0", ...(await session.ticketScopes())];
     const page = await session.openTicket(ticket, scopes);
 
-    printOutput(
-      {
-        mode: args.yes ? "submit" : "dry-run",
-        as: auth.account ? `@${auth.account}` : "(re-run `gh2 support login`)",
-        ticket: page.ticketId,
-        scope: page.scope,
-        subject: page.subject,
-        close: args.close,
-        body,
-      },
-      getOutputFormat(args.output),
-    );
+    const outputFormat = getOutputFormat(args.output);
+    const preview = {
+      mode: args.yes ? "submit" : "dry-run",
+      as: auth.account ? `@${auth.account}` : "(re-run `gh2 support login`)",
+      ticket: page.ticketId,
+      scope: page.scope,
+      subject: page.subject,
+      close: args.close,
+      body,
+    };
 
     if (!args.yes) {
-      console.log("\nDry run only. Re-run with --yes to post the reply.");
+      printOutput(preview, outputFormat);
+      if (outputFormat !== "json") {
+        console.log("\nDry run only. Re-run with --yes to post the reply.");
+      }
       return;
     }
 
     await session.commentOnTicket(page, body, args.close);
-    console.log(
-      `\nReplied to GitHub Support ticket #${page.ticketId}${args.close ? " and closed it" : ""}.`,
-    );
+    if (outputFormat !== "json") {
+      console.log(`Replied to GitHub Support ticket #${page.ticketId}${args.close ? " and closed it" : ""}.`);
+    }
+    printOutput({ ...preview, mode: "created" }, outputFormat);
   },
 });

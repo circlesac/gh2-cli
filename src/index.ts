@@ -6,6 +6,7 @@ import { supportCommand } from "./commands/support/index.ts";
 import { installCommand } from "./commands/install/index.ts";
 import { repoCommand } from "./commands/repo/index.ts";
 import { orgCommand } from "./commands/org/index.ts";
+import { doctorCommand } from "./commands/doctor.ts";
 import { checkForUpdate } from "./lib/update-check.ts";
 import pkg from "../package.json";
 
@@ -22,6 +23,7 @@ const main = defineCommand({
     install: installCommand,
     repo: repoCommand,
     org: orgCommand,
+    doctor: doctorCommand,
   },
 });
 

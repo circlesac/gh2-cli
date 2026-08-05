@@ -81,6 +81,24 @@ permissions and webhook-event subscriptions not named in `--set`. Existing
 installations can require a separate owner approval after the App registration is
 updated.
 
+## Live contract verification
+
+Run the read-only canary after `gh2 app login` to distinguish GitHub markup drift from an expired or sudo-gated browser session:
+
+```bash
+gh2 doctor \
+  --org example-org \
+  --app example-app \
+  --installation 12345 \
+  --support \
+  --pat-account example-user \
+  --pat-owner example-org \
+  --pat-repo example-repo \
+  --output json
+```
+
+Exit `0` means every requested live parser returned a valid contract, exit `2` means browser or sudo reauthentication is required, and exit `1` means a contract changed or another probe failed. The doctor never passes `--yes`; schedule it only on a trusted local machine because browser cookies must not be stored in GitHub Actions secrets.
+
 ### App private keys
 
 ```bash
