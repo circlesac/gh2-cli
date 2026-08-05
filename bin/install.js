@@ -32,7 +32,7 @@ function download(url) {
   });
 }
 
-if (process.env.CI) process.exit(0);
+if (process.env.CI || fs.existsSync(path.join(__dirname, "..", ".git"))) process.exit(0);
 
 const nativeDir = path.join(__dirname, "native");
 const binPath = path.join(nativeDir, "gh2");

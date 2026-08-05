@@ -812,8 +812,11 @@ export const patCreateCommand = defineCommand({
     };
 
     if (!args.yes) {
-      printOutput(preview, getOutputFormat(args.format));
-      console.log("Dry run only. Re-run with --yes and --token-output to create the PAT.");
+      const outputFormat = getOutputFormat(args.format);
+      printOutput(preview, outputFormat);
+      if (outputFormat !== "json") {
+        console.log("Dry run only. Re-run with --yes and --token-output to create the PAT.");
+      }
       return;
     }
 

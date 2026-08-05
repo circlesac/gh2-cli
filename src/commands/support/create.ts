@@ -109,9 +109,12 @@ export const supportCreateCommand = defineCommand({
       captcha_required: captchaRequired,
     };
 
-    printOutput(preview, getOutputFormat(args.output));
+    const outputFormat = getOutputFormat(args.output);
     if (!args.yes) {
-      console.log("\nDry run only. Re-run with --yes to create the ticket.");
+      printOutput(preview, outputFormat);
+      if (outputFormat !== "json") {
+        console.log("\nDry run only. Re-run with --yes to create the ticket.");
+      }
       return;
     }
 
@@ -134,7 +137,7 @@ export const supportCreateCommand = defineCommand({
         userLogin: bootstrap.userLogin,
       }),
     );
-    console.log("\nGitHub Support ticket created.");
-    if (result !== undefined) printOutput(result, getOutputFormat(args.output));
+    if (outputFormat !== "json") console.log("GitHub Support ticket created.");
+    printOutput(result ?? { ...preview, mode: "created" }, outputFormat);
   },
 });

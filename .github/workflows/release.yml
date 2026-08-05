@@ -7,7 +7,17 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+
   version:
+    needs: verify
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.bump.outputs.version }}
@@ -62,10 +72,12 @@ jobs:
       - name: Build binary
         run: |
           bun build --compile --target=${{ matrix.target }} --outfile=gh2 src/index.ts
-          if [[ "${{ matrix.target }}" == bun-darwin-* ]]; then
-            codesign --remove-signature gh2
-            codesign --force --deep -s - gh2
-          fi
+          case "${{ matrix.target }}" in
+            bun-darwin-*)
+              codesign --remove-signature gh2
+              codesign --force --deep -s - gh2
+              ;;
+          esac
           tar czf ${{ matrix.name }}.tar.gz gh2
 
       - name: Package Debian artifact
@@ -147,7 +159,7 @@ jobs:
           SHA_LINUX_ARM64=$(shasum -a 256 artifacts/gh2-linux-arm64/*.tar.gz | cut -d' ' -f1)
           SHA_LINUX_X64=$(shasum -a 256 artifacts/gh2-linux-x64/*.tar.gz | cut -d' ' -f1)
 
-          git clone https://x-access-token:${GH_TOKEN}@github.com/circlesac/homebrew-tap.git
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/circlesac/homebrew-tap.git"
           cd homebrew-tap
           cp ../homebrew/gh2.rb.template Formula/gh2.rb
           sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" Formula/gh2.rb
@@ -175,3 +187,63 @@ jobs:
             printf 'push attempt %s failed\n' "$attempt" >&2
           done
           exit 1
+
+  verify-release:
+    needs: [version, publish-npm, publish-package-indexes]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm installation
+        shell: bash
+        run: |
+          for attempt in {1..10}; do
+            if npm install --prefix "$RUNNER_TEMP/npm" "@circlesac/gh2@$VERSION"; then
+              break
+            fi
+            test "$attempt" -lt 10
+            sleep 15
+          done
+          test "$("$RUNNER_TEMP/npm/node_modules/.bin/gh2" --version)" = "$VERSION"
+          "$RUNNER_TEMP/npm/node_modules/.bin/gh2" doctor --help >/dev/null
+
+      - name: Verify standalone installation
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/standalone"
+          curl -fsSL https://github.com/circlesac/gh2-cli/releases/latest/download/install.sh | INSTALL_DIR="$RUNNER_TEMP/standalone" sh
+          test "$("$RUNNER_TEMP/standalone/gh2" --version)" = "$VERSION"
+          "$RUNNER_TEMP/standalone/gh2" doctor --help >/dev/null
+
+      - name: Verify Debian package
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gh2.deb" "https://github.com/circlesac/gh2-cli/releases/download/v$VERSION/gh2_${VERSION}_amd64.deb"
+          dpkg-deb --extract "$RUNNER_TEMP/gh2.deb" "$RUNNER_TEMP/deb"
+          test "$("$RUNNER_TEMP/deb/usr/bin/gh2" --version)" = "$VERSION"
+          "$RUNNER_TEMP/deb/usr/bin/gh2" doctor --help >/dev/null
+
+      - name: Verify Homebrew installation
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          for attempt in {1..10}; do
+            brew update
+            if brew install circlesac/tap/gh2; then
+              break
+            fi
+            test "$attempt" -lt 10
+            sleep 15
+          done
+          test "$(gh2 --version)" = "$VERSION"
+          gh2 doctor --help >/dev/null

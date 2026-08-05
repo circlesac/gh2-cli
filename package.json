@@ -14,7 +14,8 @@
     "build": "bun build --compile --outfile=dist/gh2 src/index.ts",
     "dev": "bun run src/index.ts",
     "postinstall": "node bin/install.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "citty": "^0.2.0"
@@ -30,5 +31,5 @@
     "type": "git",
     "url": "https://github.com/circlesac/gh2-cli"
   },
-  "version": "0.0.1"
+  "version": "0.0.0"
 }
