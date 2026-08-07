@@ -47,6 +47,8 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&#(\d+);/g, (_, decimal) => String.fromCodePoint(Number(decimal)))
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
@@ -203,11 +205,164 @@ export interface SupportTicketPage {
   subject?: string;
 }
 
+export interface SupportTicketComment {
+  id: string;
+  author: string;
+  createdAt: string;
+  body: string;
+}
+
+export interface SupportTicketDetails {
+  ticketId: string;
+  scope: string;
+  subject?: string;
+  status: "open" | "closed";
+  author: string;
+  createdAt: string;
+  body: string;
+  comments: SupportTicketComment[];
+}
+
 function attribute(tag: string, name: string): string | undefined {
   // The leading boundary matters: the comment form carries both `action` and
   // `data-action`, and an unanchored match returns the Catalyst binding.
   const value = tag.match(new RegExp(`[\\s<]${name}="([^"]*)"`, "i"))?.[1];
   return value === undefined ? undefined : decodeHtmlEntities(value);
+}
+
+function htmlToText(html: string): string {
+  return decodeHtmlEntities(
+    html
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<hr\b[^>]*>/gi, "\n---\n")
+      .replace(/<li\b[^>]*>/gi, "- ")
+      .replace(
+        /<\/(?:blockquote|div|h[1-6]|li|ol|p|pre|table|tbody|td|th|thead|tr|ul)>/gi,
+        "\n",
+      )
+      .replace(/<[^>]+>/g, ""),
+  )
+    .replace(/\r/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function firstClassBlock(
+  html: string,
+  tagName: string,
+  className: string,
+): string | undefined {
+  const openingTags = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
+  let opening: RegExpExecArray | null;
+  while ((opening = openingTags.exec(html))) {
+    const classes = attribute(opening[0], "class")?.split(/\s+/) ?? [];
+    if (!classes.includes(className)) continue;
+
+    const tags = new RegExp(`<\\/?${tagName}\\b[^>]*>`, "gi");
+    tags.lastIndex = opening.index;
+    let depth = 0;
+    let openingEnd = -1;
+    let tag: RegExpExecArray | null;
+    while ((tag = tags.exec(html))) {
+      if (tag[0].startsWith("</")) {
+        depth -= 1;
+        if (depth === 0) {
+          return html.slice(openingEnd, tag.index);
+        }
+      } else {
+        depth += 1;
+        if (openingEnd < 0) openingEnd = tags.lastIndex;
+      }
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function parseSupportComment(html: string): SupportTicketComment {
+  const timelineTag = html.match(/<div\b[^>]*\bid="tc-[^"]+"[^>]*>/i)?.[0];
+  const authorHtml = html.match(
+    /<span\b[^>]*class="[^"]*\bauthor\b[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
+  )?.[1];
+  const timeTag = html.match(/<relative-time\b[^>]*>/i)?.[0];
+  const bodyHtml = firstClassBlock(html, "div", "zd-comment");
+  const id = timelineTag
+    ? attribute(timelineTag, "id")?.replace(/^tc-/, "")
+    : undefined;
+  const createdAt = timeTag ? attribute(timeTag, "datetime") : undefined;
+  const author = authorHtml ? htmlToText(authorHtml) : undefined;
+  if (!id || !createdAt || !author || bodyHtml === undefined) {
+    throw new Error(
+      "GitHub Support returned an unexpected ticket-comment shape.",
+    );
+  }
+  return { id, author, createdAt, body: htmlToText(bodyHtml) };
+}
+
+/** Parse the read-only ticket timeline. Portal order is newest-first. */
+export function parseSupportTicketDetails(html: string): SupportTicketDetails {
+  const ticketTag = html.match(/<[^>]*id="ticket"[^>]*>/i)?.[0];
+  if (!ticketTag) {
+    if (/Ticket not found/i.test(html)) {
+      throw new Error(
+        "GitHub Support says the ticket does not exist or is not accessible to this session. Re-run `gh2 support login` if your browser is signed in as a different account.",
+      );
+    }
+    throw new Error(
+      "GitHub Support ticket data was not found. The portal markup may have changed.",
+    );
+  }
+
+  const ticketId = attribute(ticketTag, "data-ticket-id");
+  const orgType = attribute(ticketTag, "data-org-type");
+  const orgId = attribute(ticketTag, "data-org-id");
+  const status = html
+    .match(/class="[^"]*\bState--(open|closed)\b/i)?.[1]
+    ?.toLowerCase();
+  if (
+    !ticketId ||
+    !orgType ||
+    orgId === undefined ||
+    (status !== "open" && status !== "closed")
+  ) {
+    throw new Error("GitHub Support returned an unexpected ticket-data shape.");
+  }
+
+  const entries = [
+    ...html.matchAll(
+      /<ticket-comment\b[^>]*>([\s\S]*?)<\/ticket-comment>/gi,
+    ),
+  ]
+    .map((match) => parseSupportComment(match[1] ?? ""))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const initial = entries[0];
+  if (!initial) {
+    throw new Error(
+      "GitHub Support returned a ticket without a readable timeline.",
+    );
+  }
+
+  const title = html.match(/<title>([^<]*)<\/title>/i)?.[1];
+  const subjectWithNumber = title
+    ? decodeHtmlEntities(title).replace(/\s*-\s*GitHub Support\s*$/i, "").trim()
+    : undefined;
+  const subject = subjectWithNumber
+    ?.replace(new RegExp(`\\s+#${ticketId}$`), "")
+    .trim();
+
+  return {
+    ticketId,
+    scope: `${orgType}/${orgId}`,
+    subject: subject || undefined,
+    status,
+    author: initial.author,
+    createdAt: initial.createdAt,
+    body: initial.body,
+    comments: entries.slice(1),
+  };
 }
 
 /**
@@ -418,15 +573,11 @@ export class SupportSession {
     return parseTicketScopes(await response.text());
   }
 
-  /**
-   * Load a ticket, trying each scope until one renders it. The portal answers
-   * HTTP 200 with a "Ticket not found" body for the wrong scope, so the status
-   * code alone cannot decide this.
-   */
-  async openTicket(
+  private async findTicket<T>(
     ticketId: string,
     scopes: string[],
-  ): Promise<SupportTicketPage> {
+    parser: (html: string) => T,
+  ): Promise<T> {
     let lastError: Error | undefined;
     for (const scope of scopes) {
       const response = await this.request(
@@ -434,7 +585,7 @@ export class SupportSession {
       );
       if (!response.ok) continue;
       try {
-        return parseSupportTicketPage(await response.text());
+        return parser(await response.text());
       } catch (error) {
         lastError = error as Error;
       }
@@ -445,6 +596,25 @@ export class SupportSession {
         `Ticket #${ticketId} was not found in any accessible support scope.`,
       )
     );
+  }
+
+  /**
+   * Load a ticket, trying each scope until one renders it. The portal answers
+   * HTTP 200 with a "Ticket not found" body for the wrong scope, so the status
+   * code alone cannot decide this.
+   */
+  async openTicket(
+    ticketId: string,
+    scopes: string[],
+  ): Promise<SupportTicketPage> {
+    return this.findTicket(ticketId, scopes, parseSupportTicketPage);
+  }
+
+  async viewTicket(
+    ticketId: string,
+    scopes: string[],
+  ): Promise<SupportTicketDetails> {
+    return this.findTicket(ticketId, scopes, parseSupportTicketDetails);
   }
 
   async commentOnTicket(

@@ -47,6 +47,8 @@ gh2 pat create --account <login> --name <name> --owner <login> \
   --expires-in <days|none> [--yes --token-output <new-file|->]
 gh2 support login
 gh2 support create --subject <subject> --body <body> [--account <identifier>] [--yes]
+gh2 support view <ticket> [--scope personal/0] [--output json]
+gh2 support reply <ticket> --body <body> [--scope personal/0] [--yes]
 ```
 
 ### Administration boundary
@@ -206,10 +208,14 @@ organization-owned token into pending approval after creation.
 
 ### GitHub Support tickets
 
-`gh2 support create` signs in to `support.github.com` through GitHub OAuth using the session captured by `gh2 support login`. It does not open a browser. The default is a live-authenticated dry run; add `--yes` only after reviewing the exact ticket.
+The Support commands sign in to `support.github.com` through GitHub OAuth using the session captured by `gh2 support login`. They do not open a browser. Ticket creation and replies default to a live-authenticated dry run; add `--yes` only after reviewing the exact write.
 
 ```bash
 gh2 support login
+
+# Read the original body and every reply in chronological order
+gh2 support view 4608817
+gh2 support view 4608817 --scope personal/0 --output json
 
 gh2 support create \
   --account "Circles Inc." \
@@ -222,9 +228,15 @@ gh2 support create \
   --subject "Remove sensitive data from repository history" \
   --body-file ./ticket.md \
   --yes
+
+# Preview a reply; omit --yes unless posting was explicitly requested
+gh2 support reply 4608817 --body-file ./reply.md
+gh2 support reply 4608817 --body-file ./reply.md --yes
 ```
 
-The command uses GitHub Support's authenticated web endpoint because GitHub does not publish a Support ticket REST or GraphQL API. Portal changes can therefore require a `gh2` update. If GitHub requires a captcha, the command refuses to submit and directs the operator to the portal.
+`support view --output json` returns `ticket`, `subject`, `status`, `account`, `scope`, `created_at`, `author`, `body`, and chronological `comments` containing `id`, `author`, `created_at`, and `body`. Authentication cookies and form tokens are never part of the output.
+
+The commands use GitHub Support's authenticated web pages because GitHub does not publish a Support ticket REST or GraphQL API. Portal changes can therefore require a `gh2` update. If GitHub requires a captcha, ticket creation refuses to submit and directs the operator to the portal.
 
 ## Webhook lifecycle
 

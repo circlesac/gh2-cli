@@ -188,10 +188,14 @@ copy the token into logs, table output, issue bodies, or pull request text.
 
 ## GitHub Support
 
-Create a ticket without opening the Support portal in a browser:
+Read or create a ticket without opening the Support portal in a browser:
 
 ```bash
 gh2 support login
+
+# Read the original body and every reply in chronological order
+gh2 support view 4608817
+gh2 support view 4608817 --scope personal/0 --output json
 
 # Dry run: authenticates and prints the exact ticket without creating it
 gh2 support create \
@@ -205,9 +209,15 @@ gh2 support create \
   --subject "Remove sensitive data from repository history" \
   --body-file ./ticket.md \
   --yes
+
+# Preview a reply; omit --yes unless posting was explicitly requested
+gh2 support reply 4608817 --body-file ./reply.md
+gh2 support reply 4608817 --body-file ./reply.md --yes
 ```
 
-Use `--body -` to read the body from stdin. The command refuses submission if GitHub requires a captcha. Treat this as a web integration that may need updating when the Support portal changes.
+`support view` is read-only. Its JSON output contains ticket metadata, the original `body`, and chronological `comments` with `id`, `author`, `created_at`, and `body`; it must never include authentication cookies or form tokens. Use `--scope personal/0` (or an organization scope) to skip account discovery when the scope is already known.
+
+Use `--body -` to read a create/reply body from stdin. Write commands remain dry runs without `--yes`, and ticket creation refuses submission if GitHub requires a captcha. Treat Support commands as a web integration that may need updating when the portal changes.
 
 ## Default config path
 
