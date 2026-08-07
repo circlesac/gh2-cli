@@ -1,7 +1,6 @@
 ---
 name: gh2
 description: Guide for GitHub Apps, installation approvals, deleted-repository restoration, organization PAT policies, fine-grained personal access tokens, and Support via the gh2 CLI
-user-invocable: false
 ---
 
 # gh2 CLI
