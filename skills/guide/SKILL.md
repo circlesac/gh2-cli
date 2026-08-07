@@ -1,7 +1,6 @@
 ---
 name: gh2
 description: Guide for GitHub Apps, installation approvals, deleted-repository restoration, organization PAT policies, fine-grained personal access tokens, and Support via the gh2 CLI
-user-invocable: false
 ---
 
 # gh2 CLI
@@ -188,10 +187,14 @@ copy the token into logs, table output, issue bodies, or pull request text.
 
 ## GitHub Support
 
-Create a ticket without opening the Support portal in a browser:
+Read or create a ticket without opening the Support portal in a browser:
 
 ```bash
 gh2 support login
+
+# Read the original body and every reply in chronological order
+gh2 support view 1234567
+gh2 support view 1234567 --scope personal/0 --output json
 
 # Dry run: authenticates and prints the exact ticket without creating it
 gh2 support create \
@@ -205,9 +208,19 @@ gh2 support create \
   --subject "Remove sensitive data from repository history" \
   --body-file ./ticket.md \
   --yes
+
+# Preview a reply; omit --yes unless posting was explicitly requested
+gh2 support reply 1234567 --body-file ./reply.md
+gh2 support reply 1234567 --body-file ./reply.md --yes
 ```
 
-Use `--body -` to read the body from stdin. The command refuses submission if GitHub requires a captcha. Treat this as a web integration that may need updating when the Support portal changes.
+Keep support tickets and replies minimal and action-oriented: state the exact action requested and include only the identifiers and evidence GitHub needs to perform it. Do not volunteer internal migration history, business context, or exhaustive verification logs unless GitHub asks.
+
+Before running `gh2 support create ... --yes` or `gh2 support reply ... --yes`, always run the dry run, show the exact subject and body to the user, and obtain explicit approval for that text. A general instruction to handle the ticket is not approval to submit unseen wording.
+
+`support view` is read-only. Its JSON output contains ticket metadata, the original `body`, and chronological `comments` with `id`, `author`, `created_at`, and `body`; it must never include authentication cookies or form tokens. Use `--scope personal/0` (or an organization scope) to skip account discovery when the scope is already known.
+
+Use `--body -` to read a create/reply body from stdin. Write commands remain dry runs without `--yes`, and ticket creation refuses submission if GitHub requires a captcha. Treat Support commands as a web integration that may need updating when the portal changes.
 
 ## Default config path
 
