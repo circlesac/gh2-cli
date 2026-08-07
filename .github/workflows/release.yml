@@ -1,0 +1,252 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+
+  version:
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Calculate version
+        id: bump
+        run: |
+          VERSION=$(npx --yes @circlesac/oneup version --target package.json | tail -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: versioned-files
+          path: package.json
+
+  build:
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: bun-darwin-x64
+            name: gh2-darwin-x64
+          - os: macos-latest
+            target: bun-darwin-arm64
+            name: gh2-darwin-arm64
+          - os: ubuntu-latest
+            target: bun-linux-x64
+            name: gh2-linux-x64
+          - os: ubuntu-latest
+            target: bun-linux-arm64
+            name: gh2-linux-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: versioned-files
+
+      - name: Build binary
+        run: |
+          bun build --compile --target=${{ matrix.target }} --outfile=gh2 src/index.ts
+          case "${{ matrix.target }}" in
+            bun-darwin-*)
+              codesign --remove-signature gh2
+              codesign --force --deep -s - gh2
+              ;;
+          esac
+          tar czf ${{ matrix.name }}.tar.gz gh2
+
+      - name: Package Debian artifact
+        if: startsWith(matrix.target, 'bun-linux')
+        run: |
+          case "${{ matrix.target }}" in
+            bun-linux-x64) arch=amd64 ;;
+            bun-linux-arm64) arch=arm64 ;;
+            *) exit 1 ;;
+          esac
+          ./packaging/build-deb.sh "gh2" "${{ needs.version.outputs.version }}" "$arch" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}.*
+            gh2_*.deb
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.deb
+            bin/install.sh
+
+  publish-npm:
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: versioned-files
+
+      - name: Publish to npm
+        run: npm publish --access public
+
+  publish-package-indexes:
+    needs: [version, release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Update Homebrew and APT indexes
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION=${{ needs.version.outputs.version }}
+
+          SHA_DARWIN_ARM64=$(shasum -a 256 artifacts/gh2-darwin-arm64/*.tar.gz | cut -d' ' -f1)
+          SHA_DARWIN_X64=$(shasum -a 256 artifacts/gh2-darwin-x64/*.tar.gz | cut -d' ' -f1)
+          SHA_LINUX_ARM64=$(shasum -a 256 artifacts/gh2-linux-arm64/*.tar.gz | cut -d' ' -f1)
+          SHA_LINUX_X64=$(shasum -a 256 artifacts/gh2-linux-x64/*.tar.gz | cut -d' ' -f1)
+
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/circlesac/homebrew-tap.git"
+          cd homebrew-tap
+          cp ../homebrew/gh2.rb.template Formula/gh2.rb
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" Formula/gh2.rb
+          sed -i "s/SHA_DARWIN_ARM64/${SHA_DARWIN_ARM64}/g" Formula/gh2.rb
+          sed -i "s/SHA_DARWIN_X64/${SHA_DARWIN_X64}/g" Formula/gh2.rb
+          sed -i "s/SHA_LINUX_ARM64/${SHA_LINUX_ARM64}/g" Formula/gh2.rb
+          sed -i "s/SHA_LINUX_X64/${SHA_LINUX_X64}/g" Formula/gh2.rb
+
+          mapfile -t packages < <(find ../artifacts -type f -name 'gh2_*.deb' | sort)
+          test "${#packages[@]}" -eq 2
+          for package in "${packages[@]}"; do
+            ./apt/scripts/add-package.sh "$package" circlesac/gh2-cli "v${VERSION}"
+          done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gh2.rb "apt/manifests/gh2/${VERSION}"
+          git diff --cached --quiet && exit 0
+          git commit -m "Update gh2 to ${VERSION}"
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin main; then
+              exit 0
+            fi
+            printf 'push attempt %s failed\n' "$attempt" >&2
+          done
+          exit 1
+
+  verify-release:
+    needs: [version, publish-npm, publish-package-indexes]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm installation
+        shell: bash
+        run: |
+          for attempt in {1..20}; do
+            prefix="$RUNNER_TEMP/npm-$attempt"
+            mkdir -p "$prefix"
+            printf '%s\n' '{"private":true,"allowScripts":{"@circlesac/gh2":true}}' > "$prefix/package.json"
+            if env -u CI npm install --prefix "$prefix" "@circlesac/gh2@$VERSION" \
+              && test "$("$prefix/node_modules/.bin/gh2" --version)" = "$VERSION" \
+              && "$prefix/node_modules/.bin/gh2" doctor --help >/dev/null; then
+              exit 0
+            fi
+            test "$attempt" -lt 20
+            sleep 15
+          done
+
+      - name: Verify standalone installation
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/standalone"
+          curl -fsSL https://github.com/circlesac/gh2-cli/releases/latest/download/install.sh | INSTALL_DIR="$RUNNER_TEMP/standalone" sh
+          test "$("$RUNNER_TEMP/standalone/gh2" --version)" = "$VERSION"
+          "$RUNNER_TEMP/standalone/gh2" doctor --help >/dev/null
+
+      - name: Verify Debian package
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gh2.deb" "https://github.com/circlesac/gh2-cli/releases/download/v$VERSION/gh2_${VERSION}_amd64.deb"
+          dpkg-deb --extract "$RUNNER_TEMP/gh2.deb" "$RUNNER_TEMP/deb"
+          test "$("$RUNNER_TEMP/deb/usr/bin/gh2" --version)" = "$VERSION"
+          "$RUNNER_TEMP/deb/usr/bin/gh2" doctor --help >/dev/null
+
+      - name: Verify Homebrew installation
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          for attempt in {1..10}; do
+            brew update
+            if brew install circlesac/tap/gh2; then
+              break
+            fi
+            test "$attempt" -lt 10
+            sleep 15
+          done
+          test "$(gh2 --version)" = "$VERSION"
+          gh2 doctor --help >/dev/null
