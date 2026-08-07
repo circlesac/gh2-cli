@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   buildSupportTicketPayload,
   maskEmail,
   parseSupportBootstrap,
   parseSupportTicketPage,
+  parseSupportTicketDetails,
   parseTicketScopes,
   selectSupportAccount,
   selectSupportEmail,
@@ -11,6 +13,11 @@ import {
   type SupportAccount,
   type SupportBootstrap,
 } from "../src/lib/support.ts";
+
+const TICKET_DETAILS_HTML = readFileSync(
+  new URL("./fixtures/support-ticket.html", import.meta.url),
+  "utf8",
+);
 
 const personal: SupportAccount = {
   id: "personal-id",
@@ -177,5 +184,45 @@ describe("support ticket replies", () => {
     }).replace(/"/g, "&quot;");
     const html = `<div data-react-class="wrapped-account-selector-ticket" data-react-props="${props}"></div>`;
     expect(parseTicketScopes(html)).toEqual(["personal/0", "organization/42"]);
+  });
+});
+
+describe("support ticket view", () => {
+  it("parses the body and every comment in chronological order", () => {
+    expect(parseSupportTicketDetails(TICKET_DETAILS_HTML)).toEqual({
+      ticketId: "1234567",
+      scope: "personal/0",
+      subject: "Remove old references & confirm cleanup",
+      status: "open",
+      author: "monalisa",
+      createdAt: "2026-08-04T15:36:01Z",
+      body: [
+        "Please remove the internal references.",
+        "",
+        "- Repository A",
+        "- Repository B & C",
+      ].join("\n"),
+      comments: [
+        {
+          id: "200",
+          author: "GitHub",
+          createdAt: "2026-08-06T09:29:33Z",
+          body: "We are checking with our internal team.\nWe will follow up.",
+        },
+        {
+          id: "300",
+          author: "monalisa",
+          createdAt: "2026-08-07T02:35:52Z",
+          body: "Can you confirm the final cleanup?",
+        },
+      ],
+    });
+  });
+
+  it("reads a closed ticket without requiring a comment form", () => {
+    const closed = TICKET_DETAILS_HTML
+      .replace("State--open", "State--closed")
+      .replace(/<form id="js-ticket-comment-form"[\s\S]*?<\/form>/, "");
+    expect(parseSupportTicketDetails(closed).status).toBe("closed");
   });
 });
