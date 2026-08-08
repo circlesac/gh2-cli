@@ -218,13 +218,13 @@ gh2 support view 1234567
 gh2 support view 1234567 --scope personal/0 --output json
 
 gh2 support create \
-  --account "Circles Inc." \
+  --account "Example Corp." \
   --subject "Remove sensitive data from repository history" \
   --body-file ./ticket.md
 
 # Submit the reviewed ticket
 gh2 support create \
-  --account "Circles Inc." \
+  --account "Example Corp." \
   --subject "Remove sensitive data from repository history" \
   --body-file ./ticket.md \
   --yes
