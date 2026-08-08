@@ -319,9 +319,17 @@ export function parseSupportTicketDetails(html: string): SupportTicketDetails {
   const ticketId = attribute(ticketTag, "data-ticket-id");
   const orgType = attribute(ticketTag, "data-org-type");
   const orgId = attribute(ticketTag, "data-org-id");
-  const status = html
+  const stateTag = html.match(
+    /<([a-z][\w-]*)\b[^>]*class="[^"]*\bState\b[^"]*"[^>]*>([\s\S]*?)<\/\1>/i,
+  );
+  const stateLabel = stateTag ? htmlToText(stateTag[2] ?? "").toLowerCase() : "";
+  const legacyState = stateTag?.[0]
     .match(/class="[^"]*\bState--(open|closed)\b/i)?.[1]
     ?.toLowerCase();
+  const status =
+    stateLabel === "open" || stateLabel === "closed"
+      ? stateLabel
+      : legacyState;
   if (
     !ticketId ||
     !orgType ||

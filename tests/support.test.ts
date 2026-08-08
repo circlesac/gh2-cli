@@ -40,7 +40,7 @@ const personal: SupportAccount = {
 const organization: SupportAccount = {
   ...personal,
   id: "org-id",
-  identifier: "Circles Inc.",
+  identifier: "Example Corp.",
   type: "Organization",
 };
 
@@ -83,7 +83,7 @@ describe("Support ticket selection", () => {
   });
 
   it("matches an explicit account case-insensitively", () => {
-    expect(selectSupportAccount(bootstrap.accounts, "circles inc.")).toBe(
+    expect(selectSupportAccount(bootstrap.accounts, "example corp.")).toBe(
       organization,
     );
   });
@@ -221,8 +221,18 @@ describe("support ticket view", () => {
 
   it("reads a closed ticket without requiring a comment form", () => {
     const closed = TICKET_DETAILS_HTML
-      .replace("State--open", "State--closed")
+      .replace(
+        'class="State State--open">Open',
+        'class="State bgColor-done-emphasis">Closed',
+      )
       .replace(/<form id="js-ticket-comment-form"[\s\S]*?<\/form>/, "");
     expect(parseSupportTicketDetails(closed).status).toBe("closed");
+  });
+
+  it("keeps compatibility with the legacy status class", () => {
+    const legacyClosed = TICKET_DETAILS_HTML
+      .replace("State--open", "State--closed")
+      .replace(">Open</span>", "></span>");
+    expect(parseSupportTicketDetails(legacyClosed).status).toBe("closed");
   });
 });

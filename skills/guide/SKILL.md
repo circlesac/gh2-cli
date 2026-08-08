@@ -22,7 +22,7 @@ All config files are `github.<stage>.json` where `stage ∈ {local, prod}`:
 ```json
 {
   "appId": 2864083,
-  "name": "circlesac-yg2",
+  "name": "example-app",
   "webhookSecret": "...",
   "privateKey": "<base64-encoded PEM>"
 }
@@ -198,13 +198,13 @@ gh2 support view 1234567 --scope personal/0 --output json
 
 # Dry run: authenticates and prints the exact ticket without creating it
 gh2 support create \
-  --account "Circles Inc." \
+  --account "Example Corp." \
   --subject "Remove sensitive data from repository history" \
   --body-file ./ticket.md
 
 # Submit only after reviewing the dry run
 gh2 support create \
-  --account "Circles Inc." \
+  --account "Example Corp." \
   --subject "Remove sensitive data from repository history" \
   --body-file ./ticket.md \
   --yes

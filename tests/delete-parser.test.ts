@@ -61,8 +61,8 @@ describe("parseDeleteForm", () => {
 describe("confirmValueFromPattern", () => {
   it("reconstructs the app name from a case-insensitive char-class pattern", () => {
     expect(
-      confirmValueFromPattern("[cC][iI][rR][cC][lL][eE][sS][aA][cC]-[yY][gG]2"),
-    ).toBe("circlesac-yg2");
+      confirmValueFromPattern("[eE][xX][aA][mM][pP][lL][eE]-[aA][pP][pP]"),
+    ).toBe("example-app");
   });
 
   it("keeps literal characters (digits, hyphens) as-is", () => {

@@ -27,14 +27,14 @@ const PAT_FORM_HTML = `
       <form id="new_user_programmatic_access" action="/settings/personal-access-tokens" method="post">
         <input type="hidden" name="authenticity_token" value="a&amp;b">
         <input type="text" name="user_programmatic_access[name]" value="Priority reconciler">
-        <input type="hidden" name="target_name" value="melten-ai">
+        <input type="hidden" name="target_name" value="example-org">
         <template>
           <input type="hidden" name="user_programmatic_access[default_expires_at]" value="30">
         </template>
         <input type="hidden" name="user_programmatic_access[default_expires_at]" value="custom">
         <input type="date" name="user_programmatic_access[custom_expires_at]" value="2026-09-01">
         <textarea name="user_programmatic_access[description]">Policy automation</textarea>
-        <include-fragment src="/settings/personal-access-tokens/select-access?target_name=melten-ai&amp;issues=write"></include-fragment>
+        <include-fragment src="/settings/personal-access-tokens/select-access?target_name=example-org&amp;issues=write"></include-fragment>
       </form>
     </body>
   </html>`;
@@ -47,7 +47,7 @@ const ACCESS_HTML = `
   <input type="hidden" name="integration[default_permissions][issues]" value="write">
   <input type="hidden" name="integration[default_permissions][metadata]" value="read">
   <input type="hidden" name="integration[default_permissions][contents]" value="none">
-  <remote-input src="/settings/personal-access-tokens/suggestions?target_name=melten-ai&amp;experimental=1"></remote-input>
+  <remote-input src="/settings/personal-access-tokens/suggestions?target_name=example-org&amp;experimental=1"></remote-input>
   <script type="application/json" data-target="react-partial.embeddedData">${JSON.stringify(
     {
       props: {
@@ -70,19 +70,19 @@ const OWNER_HTML = `
     <button data-value="work-admin">work-admin</button>
   </li>
   <li data-actor-is-organization="true" data-fg-limit="366" data-fg-limit-label="366 days" data-fg-limit-exempt="false">
-    <button data-value="melten-ai">melten-ai</button>
+    <button data-value="example-org">example-org</button>
   </li>`;
 
 const REPOSITORY_HTML = `
   <li>
-    <button data-value="1245612113">melten-ai/silicon-workbench</button>
-    <input type="hidden" name="repository_ids[]" value="1245612113">
-    <span class="owner css-truncate-target">melten-ai</span>/<span class="repo">silicon-workbench</span>
+    <button data-value="101">example-org/sample-repo</button>
+    <input type="hidden" name="repository_ids[]" value="101">
+    <span class="owner css-truncate-target">example-org</span>/<span class="repo">sample-repo</span>
   </li>
   <li>
-    <button data-value="1263434240">melten-ai/pcie_gen4_pipe_axis_tl</button>
-    <input type="hidden" name="repository_ids[]" value="1263434240">
-    <span class="owner">melten-ai</span>/<span class="repo css-truncate-target">pcie_gen4_pipe_axis_tl</span>
+    <button data-value="102">example-org/another-repo</button>
+    <input type="hidden" name="repository_ids[]" value="102">
+    <span class="owner">example-org</span>/<span class="repo css-truncate-target">another-repo</span>
   </li>`;
 
 describe("fine-grained PAT form parsing", () => {
@@ -92,7 +92,7 @@ describe("fine-grained PAT form parsing", () => {
     expect(form!.account).toBe("work-admin");
     expect(form!.action).toBe("/settings/personal-access-tokens");
     expect(form!.accessPath).toBe(
-      "/settings/personal-access-tokens/select-access?target_name=melten-ai&issues=write",
+      "/settings/personal-access-tokens/select-access?target_name=example-org&issues=write",
     );
     expect(form!.fields).toContainEqual(["authenticity_token", "a&b"]);
     expect(
@@ -119,7 +119,7 @@ describe("fine-grained PAT form parsing", () => {
         maxExpirationLabel: undefined,
       },
       {
-        login: "melten-ai",
+        login: "example-org",
         organization: true,
         expirationExempt: false,
         maxExpirationDays: 366,
@@ -130,11 +130,11 @@ describe("fine-grained PAT form parsing", () => {
 
   it("reads live repository IDs without accepting other owners", () => {
     expect(parseRepositoryOptions(REPOSITORY_HTML)).toEqual([
-      { id: "1245612113", owner: "melten-ai", name: "silicon-workbench" },
+      { id: "101", owner: "example-org", name: "sample-repo" },
       {
-        id: "1263434240",
-        owner: "melten-ai",
-        name: "pcie_gen4_pipe_axis_tl",
+        id: "102",
+        owner: "example-org",
+        name: "another-repo",
       },
     ]);
   });
@@ -178,15 +178,15 @@ describe("fine-grained PAT request validation", () => {
   it("normalizes selected repositories and validates their owner", () => {
     expect(
       parseRepositorySelection(
-        "silicon-workbench,melten-ai/pcie_gen4_pipe_axis_tl",
-        "melten-ai",
+        "sample-repo,example-org/another-repo",
+        "example-org",
       ),
     ).toEqual({
       mode: "selected",
-      names: ["silicon-workbench", "pcie_gen4_pipe_axis_tl"],
+      names: ["sample-repo", "another-repo"],
     });
     expect(() =>
-      parseRepositorySelection("other/repo", "melten-ai"),
+      parseRepositorySelection("other/repo", "example-org"),
     ).toThrow(/does not belong/);
   });
 
@@ -204,18 +204,18 @@ describe("fine-grained PAT request validation", () => {
       name: "Priority reconciler",
       description: "Policy automation",
       reason: "Needed for issue reconciliation",
-      owner: "melten-ai",
+      owner: "example-org",
       repositories: {
         mode: "selected",
-        names: ["silicon-workbench", "pcie_gen4_pipe_axis_tl"],
+        names: ["sample-repo", "another-repo"],
       },
       repositoryOptions: parseRepositoryOptions(REPOSITORY_HTML),
       permissions: { issues: "write", metadata: "read" },
     });
     expect(body.get("install_target")).toBe("selected");
     expect(body.getAll("repository_ids[]")).toEqual([
-      "1245612113",
-      "1263434240",
+      "101",
+      "102",
     ]);
     expect(body.get("integration[default_permissions][issues]")).toBe("write");
     expect(body.get("integration[default_permissions][metadata]")).toBe("read");
