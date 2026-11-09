@@ -28,7 +28,7 @@ export function buildGitHubAppManifest(
 	const webhook = options.webhook ?? true;
 	const events =
 		options.events === undefined
-			? options.permissions === undefined
+			? options.permissions === undefined && webhook
 				? ["issues", "issue_comment", "pull_request", "push"]
 				: []
 			: options.events
