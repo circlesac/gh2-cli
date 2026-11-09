@@ -240,12 +240,12 @@ The commands use GitHub Support's authenticated web pages because GitHub does no
 
 ## Webhook lifecycle
 
-`app create` registers the webhook **active**, with a placeholder URL; `app update --webhook-url <url>` points it at your real endpoint. A webhook's *active* flag can only be set in the create manifest — GitHub's `/app/hook/config` API rejects `active` — so an app created inactive is permanently undeliverable via the CLI (only manual "Redeliver" in the UI works). That's why `create` sets it active up front.
+`app create` registers the webhook **active**, with a placeholder URL; `app update --webhook-url <url>` points it at your real endpoint. A webhook's _active_ flag can only be set in the create manifest — GitHub's `/app/hook/config` API rejects `active` — so an app created inactive is permanently undeliverable via the CLI (only manual "Redeliver" in the UI works). That's why `create` sets it active up front.
 
 Consequences to expect:
 
-- The **create-time verification ping** goes to the placeholder (or to your endpoint before it knows the app's webhook secret), so it will show as a **failed delivery** in the app's *Advanced → Recent Deliveries*. This is expected and harmless — GitHub only auto-disables after *sustained* failures, not one. Set the real URL with `app update`, deploy your endpoint, and real events flow.
-- If you *did* create an app inactive (older versions), you can't fix it via the API — reactivate the webhook in the app's *Advanced* settings, or delete and recreate the app.
+- The **create-time verification ping** goes to the placeholder (or to your endpoint before it knows the app's webhook secret), so it will show as a **failed delivery** in the app's _Advanced → Recent Deliveries_. This is expected and harmless — GitHub only auto-disables after _sustained_ failures, not one. Set the real URL with `app update`, deploy your endpoint, and real events flow.
+- If you _did_ create an app inactive (older versions), you can't fix it via the API — reactivate the webhook in the app's _Advanced_ settings, or delete and recreate the app.
 
 ## Output contract
 
@@ -253,20 +253,33 @@ Consequences to expect:
 
 ```ts
 interface GitHubAppConfig {
-  appId: number;
-  name: string;
-  webhookSecret: string;
-  privateKey: string; // base64-encoded PEM
+	appId: number;
+	name: string;
+	webhookSecret: string;
+	privateKey: string; // base64-encoded PEM
 }
 ```
 
 ## Auth
 
-| Channel | Mechanism | Used by |
-|---|---|---|
+| Channel               | Mechanism                                | Used by                                                                                                                                        |
+| --------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Web session (cookies) | OS keystore extract → `~/.gh2/auth.json` | App `login`/`list`/`permissions`/`delete`/`key`, installation approval, repository restoration, organization PAT policy, PAT creation, Support |
-| API (JWT) | RS256 sign with app PEM | `info`, `update`, `token`, `register` |
+| API (JWT)             | RS256 sign with app PEM                  | `info`, `update`, `token`, `register`                                                                                                          |
 
 ## License
 
 MIT
+
+### App creation with minimal permissions
+
+`app create` keeps its existing defaults. Pass `--permissions` to replace them with an exact set. Custom permissions default to no subscribed events; `--events` selects events explicitly. `--no-webhook` disables webhook delivery and rejects nonempty events. `--dry-run` prints the exact manifest without opening a browser or registering an App. `--no-open` prints URLs for manual navigation; `--timeout` controls the callback wait.
+
+```sh
+gh2 app create example-catalog --org example-org --permissions metadata=read --no-webhook --dry-run
+gh2 app create example-catalog --org example-org --permissions metadata=read --no-webhook --no-open --timeout 600
+```
+
+## Development tooling
+
+`bun run check` checks formatting, lint and strict types; `bun run test` runs that gate and Vitest. Biome is the single native formatter/linter, following Circles decision 0003; its init defaults are retained with explicit `any` elevated to an error. TypeScript 7 requires the explicit `bun` type entry to resolve Bun runtime globals. Dependencies were resolved against the registry on 2026-11-09: citty 0.2.2, Vitest 5.1.0, TypeScript 7.0.2, @types/bun 1.4.4, Biome 2.6.6.

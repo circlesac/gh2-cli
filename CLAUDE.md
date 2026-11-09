@@ -30,10 +30,10 @@ The workflow bumps CalVer via `@circlesac/oneup`, builds multi-platform binaries
 
 ```ts
 interface GitHubAppConfig {
-  appId: number;
-  name: string;
-  webhookSecret: string;
-  privateKey: string; // base64-encoded PEM
+	appId: number;
+	name: string;
+	webhookSecret: string;
+	privateKey: string; // base64-encoded PEM
 }
 ```
 

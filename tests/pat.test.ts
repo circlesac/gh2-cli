@@ -1,23 +1,23 @@
-import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 import { __testing } from "../src/commands/pat/create.ts";
 
 const {
-  assertAccountMatches,
-  buildPatBody,
-  extractPatToken,
-  parseConfirmationForm,
-  parseOwnerOptions,
-  parsePatForm,
-  parsePermissionAssignments,
-  parsePermissionDefinitions,
-  parseRepositoryOptions,
-  parseRepositorySelection,
-  prepareTokenSink,
-  submitPatForm,
-  validateExpiration,
+	assertAccountMatches,
+	buildPatBody,
+	extractPatToken,
+	parseConfirmationForm,
+	parseOwnerOptions,
+	parsePatForm,
+	parsePermissionAssignments,
+	parsePermissionDefinitions,
+	parseRepositoryOptions,
+	parseRepositorySelection,
+	prepareTokenSink,
+	submitPatForm,
+	validateExpiration,
 } = __testing;
 
 const PAT_FORM_HTML = `
@@ -49,21 +49,30 @@ const ACCESS_HTML = `
   <input type="hidden" name="integration[default_permissions][contents]" value="none">
   <remote-input src="/settings/personal-access-tokens/suggestions?target_name=example-org&amp;experimental=1"></remote-input>
   <script type="application/json" data-target="react-partial.embeddedData">${JSON.stringify(
-    {
-      props: {
-        resources: {
-          repository: [
-            { name: "issues", metadata: { fgp: ["Read-only", "Read and write"] } },
-            { name: "metadata", metadata: { fgp: ["Read-only"] } },
-            { name: "contents", metadata: { fgp: ["Read-only", "Read and write"] } },
-          ],
-          organization: [
-            { name: "organization_projects", metadata: { fgp: ["Read-only", "Read and write", "Admin"] } },
-          ],
-        },
-      },
-    },
-  )}</script>`;
+		{
+			props: {
+				resources: {
+					repository: [
+						{
+							name: "issues",
+							metadata: { fgp: ["Read-only", "Read and write"] },
+						},
+						{ name: "metadata", metadata: { fgp: ["Read-only"] } },
+						{
+							name: "contents",
+							metadata: { fgp: ["Read-only", "Read and write"] },
+						},
+					],
+					organization: [
+						{
+							name: "organization_projects",
+							metadata: { fgp: ["Read-only", "Read and write", "Admin"] },
+						},
+					],
+				},
+			},
+		},
+	)}</script>`;
 
 const OWNER_HTML = `
   <li data-actor-is-organization="false" data-fg-limit-exempt="true">
@@ -86,256 +95,258 @@ const REPOSITORY_HTML = `
   </li>`;
 
 describe("fine-grained PAT form parsing", () => {
-  it("reads the authenticated account and active form fields", () => {
-    const form = parsePatForm(PAT_FORM_HTML);
-    expect(form).not.toBeNull();
-    expect(form!.account).toBe("work-admin");
-    expect(form!.action).toBe("/settings/personal-access-tokens");
-    expect(form!.accessPath).toBe(
-      "/settings/personal-access-tokens/select-access?target_name=example-org&issues=write",
-    );
-    expect(form!.fields).toContainEqual(["authenticity_token", "a&b"]);
-    expect(
-      form!.fields.filter(
-        ([name]) => name === "user_programmatic_access[default_expires_at]",
-      ),
-    ).toEqual([["user_programmatic_access[default_expires_at]", "custom"]]);
-  });
+	it("reads the authenticated account and active form fields", () => {
+		const form = parsePatForm(PAT_FORM_HTML);
+		expect(form).not.toBeNull();
+		expect(form!.account).toBe("work-admin");
+		expect(form!.action).toBe("/settings/personal-access-tokens");
+		expect(form!.accessPath).toBe(
+			"/settings/personal-access-tokens/select-access?target_name=example-org&issues=write",
+		);
+		expect(form!.fields).toContainEqual(["authenticity_token", "a&b"]);
+		expect(
+			form!.fields.filter(
+				([name]) => name === "user_programmatic_access[default_expires_at]",
+			),
+		).toEqual([["user_programmatic_access[default_expires_at]", "custom"]]);
+	});
 
-  it("fails safely when the captured account differs", () => {
-    expect(() => assertAccountMatches("example-user", "work-admin")).toThrow(
-      /belongs to example-user, not work-admin/,
-    );
-    expect(() => assertAccountMatches("Work-Admin", "work-admin")).not.toThrow();
-  });
+	it("fails safely when the captured account differs", () => {
+		expect(() => assertAccountMatches("example-user", "work-admin")).toThrow(
+			/belongs to example-user, not work-admin/,
+		);
+		expect(() =>
+			assertAccountMatches("Work-Admin", "work-admin"),
+		).not.toThrow();
+	});
 
-  it("reads owner expiration policy from the live selector", () => {
-    expect(parseOwnerOptions(OWNER_HTML)).toEqual([
-      {
-        login: "work-admin",
-        organization: false,
-        expirationExempt: true,
-        maxExpirationDays: undefined,
-        maxExpirationLabel: undefined,
-      },
-      {
-        login: "example-org",
-        organization: true,
-        expirationExempt: false,
-        maxExpirationDays: 366,
-        maxExpirationLabel: "366 days",
-      },
-    ]);
-  });
+	it("reads owner expiration policy from the live selector", () => {
+		expect(parseOwnerOptions(OWNER_HTML)).toEqual([
+			{
+				login: "work-admin",
+				organization: false,
+				expirationExempt: true,
+				maxExpirationDays: undefined,
+				maxExpirationLabel: undefined,
+			},
+			{
+				login: "example-org",
+				organization: true,
+				expirationExempt: false,
+				maxExpirationDays: 366,
+				maxExpirationLabel: "366 days",
+			},
+		]);
+	});
 
-  it("reads live repository IDs without accepting other owners", () => {
-    expect(parseRepositoryOptions(REPOSITORY_HTML)).toEqual([
-      { id: "101", owner: "example-org", name: "sample-repo" },
-      {
-        id: "102",
-        owner: "example-org",
-        name: "another-repo",
-      },
-    ]);
-  });
+	it("reads live repository IDs without accepting other owners", () => {
+		expect(parseRepositoryOptions(REPOSITORY_HTML)).toEqual([
+			{ id: "101", owner: "example-org", name: "sample-repo" },
+			{
+				id: "102",
+				owner: "example-org",
+				name: "another-repo",
+			},
+		]);
+	});
 
-  it("reads the allowed levels for each live permission", () => {
-    expect(parsePermissionDefinitions(ACCESS_HTML)).toEqual({
-      issues: { scope: "repository", levels: ["read", "write"] },
-      metadata: { scope: "repository", levels: ["read"] },
-      contents: { scope: "repository", levels: ["read", "write"] },
-      organization_projects: {
-        scope: "organization",
-        levels: ["read", "write", "admin"],
-      },
-    });
-  });
+	it("reads the allowed levels for each live permission", () => {
+		expect(parsePermissionDefinitions(ACCESS_HTML)).toEqual({
+			issues: { scope: "repository", levels: ["read", "write"] },
+			metadata: { scope: "repository", levels: ["read"] },
+			contents: { scope: "repository", levels: ["read", "write"] },
+			organization_projects: {
+				scope: "organization",
+				levels: ["read", "write", "admin"],
+			},
+		});
+	});
 });
 
 describe("fine-grained PAT request validation", () => {
-  const organization = parseOwnerOptions(OWNER_HTML)[1]!;
+	const organization = parseOwnerOptions(OWNER_HTML)[1]!;
 
-  it("adds mandatory metadata read permission", () => {
-    expect(parsePermissionAssignments("issues=write")).toEqual({
-      issues: "write",
-      metadata: "read",
-    });
-  });
+	it("adds mandatory metadata read permission", () => {
+		expect(parsePermissionAssignments("issues=write")).toEqual({
+			issues: "write",
+			metadata: "read",
+		});
+	});
 
-  it("rejects unsupported levels and metadata write", () => {
-    expect(parsePermissionAssignments("organization_projects=admin")).toEqual({
-      organization_projects: "admin",
-      metadata: "read",
-    });
-    expect(() => parsePermissionAssignments("issues=owner")).toThrow(
-      /Expected read, write, or admin/,
-    );
-    expect(() => parsePermissionAssignments("metadata=write")).toThrow(
-      /only supports read/,
-    );
-  });
+	it("rejects unsupported levels and metadata write", () => {
+		expect(parsePermissionAssignments("organization_projects=admin")).toEqual({
+			organization_projects: "admin",
+			metadata: "read",
+		});
+		expect(() => parsePermissionAssignments("issues=owner")).toThrow(
+			/Expected read, write, or admin/,
+		);
+		expect(() => parsePermissionAssignments("metadata=write")).toThrow(
+			/only supports read/,
+		);
+	});
 
-  it("normalizes selected repositories and validates their owner", () => {
-    expect(
-      parseRepositorySelection(
-        "sample-repo,example-org/another-repo",
-        "example-org",
-      ),
-    ).toEqual({
-      mode: "selected",
-      names: ["sample-repo", "another-repo"],
-    });
-    expect(() =>
-      parseRepositorySelection("other/repo", "example-org"),
-    ).toThrow(/does not belong/);
-  });
+	it("normalizes selected repositories and validates their owner", () => {
+		expect(
+			parseRepositorySelection(
+				"sample-repo,example-org/another-repo",
+				"example-org",
+			),
+		).toEqual({
+			mode: "selected",
+			names: ["sample-repo", "another-repo"],
+		});
+		expect(() => parseRepositorySelection("other/repo", "example-org")).toThrow(
+			/does not belong/,
+		);
+	});
 
-  it("enforces the live owner expiration limit", () => {
-    expect(validateExpiration("30", organization)).toBe("30");
-    expect(() => validateExpiration("none", organization)).toThrow(
-      /requires an expiration/,
-    );
-    expect(() => validateExpiration("367", organization)).toThrow(/1 and 366/);
-  });
+	it("enforces the live owner expiration limit", () => {
+		expect(validateExpiration("30", organization)).toBe("30");
+		expect(() => validateExpiration("none", organization)).toThrow(
+			/requires an expiration/,
+		);
+		expect(() => validateExpiration("367", organization)).toThrow(/1 and 366/);
+	});
 
-  it("builds a selected-repository body from validated live IDs", () => {
-    const form = parsePatForm(PAT_FORM_HTML)!;
-    const body = buildPatBody(form, ACCESS_HTML, {
-      name: "Priority reconciler",
-      description: "Policy automation",
-      reason: "Needed for issue reconciliation",
-      owner: "example-org",
-      repositories: {
-        mode: "selected",
-        names: ["sample-repo", "another-repo"],
-      },
-      repositoryOptions: parseRepositoryOptions(REPOSITORY_HTML),
-      permissions: { issues: "write", metadata: "read" },
-    });
-    expect(body.get("install_target")).toBe("selected");
-    expect(body.getAll("repository_ids[]")).toEqual([
-      "101",
-      "102",
-    ]);
-    expect(body.get("integration[default_permissions][issues]")).toBe("write");
-    expect(body.get("integration[default_permissions][metadata]")).toBe("read");
-    expect(body.get("integration[default_permissions][contents]")).toBe("none");
-  });
+	it("builds a selected-repository body from validated live IDs", () => {
+		const form = parsePatForm(PAT_FORM_HTML)!;
+		const body = buildPatBody(form, ACCESS_HTML, {
+			name: "Priority reconciler",
+			description: "Policy automation",
+			reason: "Needed for issue reconciliation",
+			owner: "example-org",
+			repositories: {
+				mode: "selected",
+				names: ["sample-repo", "another-repo"],
+			},
+			repositoryOptions: parseRepositoryOptions(REPOSITORY_HTML),
+			permissions: { issues: "write", metadata: "read" },
+		});
+		expect(body.get("install_target")).toBe("selected");
+		expect(body.getAll("repository_ids[]")).toEqual(["101", "102"]);
+		expect(body.get("integration[default_permissions][issues]")).toBe("write");
+		expect(body.get("integration[default_permissions][metadata]")).toBe("read");
+		expect(body.get("integration[default_permissions][contents]")).toBe("none");
+	});
 });
 
 describe("fine-grained PAT submission", () => {
-  const token = `github_pat_${"a".repeat(60)}`;
+	const token = `github_pat_${"a".repeat(60)}`;
 
-  it("extracts only a full fine-grained PAT value", () => {
-    expect(extractPatToken(`<input value="${token}">`)).toBe(token);
-    expect(extractPatToken("github_pat_short")).toBeNull();
-  });
+	it("extracts only a full fine-grained PAT value", () => {
+		expect(extractPatToken(`<input value="${token}">`)).toBe(token);
+		expect(extractPatToken("github_pat_short")).toBeNull();
+	});
 
-  it("parses the confirmation form but not a validation form", () => {
-    const confirmation = parseConfirmationForm(`
+	it("parses the confirmation form but not a validation form", () => {
+		const confirmation = parseConfirmationForm(`
       <turbo-frame id="fg_pat_confirmation_dialog">
         <form action="/settings/personal-access-tokens/confirm" method="post">
           <input type="hidden" name="authenticity_token" value="confirm-token">
           <input type="hidden" name="request_id" value="42">
         </form>
       </turbo-frame>`);
-    expect(confirmation).toEqual({
-      action: "/settings/personal-access-tokens/confirm",
-      fields: [
-        ["authenticity_token", "confirm-token"],
-        ["request_id", "42"],
-      ],
-    });
-    expect(
-      parseConfirmationForm(`
+		expect(confirmation).toEqual({
+			action: "/settings/personal-access-tokens/confirm",
+			fields: [
+				["authenticity_token", "confirm-token"],
+				["request_id", "42"],
+			],
+		});
+		expect(
+			parseConfirmationForm(`
         <form id="new_user_programmatic_access" action="/settings/personal-access-tokens">
           <input name="authenticity_token" value="retry-token">
         </form>`),
-    ).toBeNull();
-  });
+		).toBeNull();
+	});
 
-  it("submits the confirmation step and returns the one-time token", async () => {
-    const calls: { url: string; body: string }[] = [];
-    const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      calls.push({
-        url: String(input),
-        body: String(init?.body ?? ""),
-      });
-      if (calls.length === 1) {
-        return new Response(
-          `<turbo-frame id="fg_pat_confirmation_dialog">
+	it("submits the confirmation step and returns the one-time token", async () => {
+		const calls: { url: string; body: string }[] = [];
+		const fakeFetch = (async (
+			input: string | URL | Request,
+			init?: RequestInit,
+		) => {
+			calls.push({
+				url: String(input),
+				body: String(init?.body ?? ""),
+			});
+			if (calls.length === 1) {
+				return new Response(
+					`<turbo-frame id="fg_pat_confirmation_dialog">
             <form action="/settings/personal-access-tokens/confirm">
               <input name="authenticity_token" value="confirm-token">
               <input name="request_id" value="42">
             </form>
           </turbo-frame>`,
-          { status: 200 },
-        );
-      }
-      return new Response(`<input id="new-access-token" value="${token}">`, {
-        status: 200,
-      });
-    }) as typeof fetch;
+					{ status: 200 },
+				);
+			}
+			return new Response(`<input id="new-access-token" value="${token}">`, {
+				status: 200,
+			});
+		}) as typeof fetch;
 
-    await expect(
-      submitPatForm(
-        {
-          action: "/settings/personal-access-tokens",
-          fields: [["authenticity_token", "initial-token"]],
-        },
-        new URLSearchParams({ authenticity_token: "initial-token" }),
-        { Cookie: "session=secret", "User-Agent": "gh2-cli" },
-        fakeFetch,
-      ),
-    ).resolves.toBe(token);
-    expect(calls).toHaveLength(2);
-    expect(calls[1]!.body).toContain("request_id=42");
-  });
+		await expect(
+			submitPatForm(
+				{
+					action: "/settings/personal-access-tokens",
+					fields: [["authenticity_token", "initial-token"]],
+				},
+				new URLSearchParams({ authenticity_token: "initial-token" }),
+				{ Cookie: "session=secret", "User-Agent": "gh2-cli" },
+				fakeFetch,
+			),
+		).resolves.toBe(token);
+		expect(calls).toHaveLength(2);
+		expect(calls[1]!.body).toContain("request_id=42");
+	});
 
-  it("refuses captcha and sudo responses", async () => {
-    const captchaFetch = (async () =>
-      new Response('<div class="flash-error">Captcha required</div>', {
-        status: 422,
-      })) as typeof fetch;
-    await expect(
-      submitPatForm(
-        { action: "/settings/personal-access-tokens", fields: [] },
-        new URLSearchParams(),
-        {},
-        captchaFetch,
-      ),
-    ).rejects.toThrow(/captcha/i);
+	it("refuses captcha and sudo responses", async () => {
+		const captchaFetch = (async () =>
+			new Response('<div class="flash-error">Captcha required</div>', {
+				status: 422,
+			})) as typeof fetch;
+		await expect(
+			submitPatForm(
+				{ action: "/settings/personal-access-tokens", fields: [] },
+				new URLSearchParams(),
+				{},
+				captchaFetch,
+			),
+		).rejects.toThrow(/captcha/i);
 
-    const sudoFetch = (async () =>
-      new Response(null, {
-        status: 302,
-        headers: { location: "/sessions/sudo" },
-      })) as typeof fetch;
-    await expect(
-      submitPatForm(
-        { action: "/settings/personal-access-tokens", fields: [] },
-        new URLSearchParams(),
-        {},
-        sudoFetch,
-      ),
-    ).rejects.toThrow(/sudo authentication/i);
-  });
+		const sudoFetch = (async () =>
+			new Response(null, {
+				status: 302,
+				headers: { location: "/sessions/sudo" },
+			})) as typeof fetch;
+		await expect(
+			submitPatForm(
+				{ action: "/settings/personal-access-tokens", fields: [] },
+				new URLSearchParams(),
+				{},
+				sudoFetch,
+			),
+		).rejects.toThrow(/sudo authentication/i);
+	});
 
-  it("writes a token only to a new mode-0600 file", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "gh2-pat-test-"));
-    const path = join(directory, "token.txt");
-    try {
-      const sink = await prepareTokenSink(path);
-      await sink.write(token);
-      expect(await readFile(path, "utf8")).toBe(`${token}\n`);
-      expect((await stat(path)).mode & 0o777).toBe(0o600);
+	it("writes a token only to a new mode-0600 file", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "gh2-pat-test-"));
+		const path = join(directory, "token.txt");
+		try {
+			const sink = await prepareTokenSink(path);
+			await sink.write(token);
+			expect(await readFile(path, "utf8")).toBe(`${token}\n`);
+			expect((await stat(path)).mode & 0o777).toBe(0o600);
 
-      const existing = join(directory, "existing.txt");
-      await writeFile(existing, "keep");
-      await expect(prepareTokenSink(existing)).rejects.toThrow();
-      expect(await readFile(existing, "utf8")).toBe("keep");
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
+			const existing = join(directory, "existing.txt");
+			await writeFile(existing, "keep");
+			await expect(prepareTokenSink(existing)).rejects.toThrow();
+			expect(await readFile(existing, "utf8")).toBe("keep");
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
 });
