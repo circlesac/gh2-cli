@@ -1,4 +1,5 @@
 ---
+
 name: gh2
 description: Guide for GitHub Apps, installation approvals, deleted-repository restoration, organization PAT policies, fine-grained personal access tokens, and Support via the gh2 CLI
 ---
@@ -21,10 +22,10 @@ All config files are `github.<stage>.json` where `stage ∈ {local, prod}`:
 
 ```json
 {
-  "appId": 2864083,
-  "name": "example-app",
-  "webhookSecret": "...",
-  "privateKey": "<base64-encoded PEM>"
+	"appId": 2864083,
+	"name": "example-app",
+	"webhookSecret": "...",
+	"privateKey": "<base64-encoded PEM>"
 }
 ```
 
